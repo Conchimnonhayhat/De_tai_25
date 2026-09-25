@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.env
+instance/
+*.sqlite3
+*.db
+docs/diagrams/*.png
+docs/diagrams/*.svg

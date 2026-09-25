@@ -1,0 +1,129 @@
+@startuml
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+class TaiKhoan {
+    +MaTaiKhoan: int [PK]
+    +HoTen: string
+    +Email: string
+    +MatKhau: string
+    +VaiTro: string
+    +TrangThai: string
+    --
+    +kiemTraMatKhau(plainText): bool
+    +coQuyen(vaiTroCan): bool
+}
+
+class SanPham {
+    +MaSanPham: string [PK]
+    +TenSanPham: string
+    +DonViTinh: string
+    +MoTa: string
+    +TrangThai: string
+    +NgayTao: datetime
+}
+
+class NguyenLieu {
+    +MaNguyenLieu: string [PK]
+    +TenNguyenLieu: string
+    +DonViTinh: string
+    +SoLuongTon: float
+    +TrangThai: string
+    +NgayCapNhat: datetime
+    --
+    +kiemTraTonKho(soLuongCan): bool
+}
+
+class DinhMucNguyenLieu {
+    +MaSanPham: string [PK, FK]
+    +MaNguyenLieu: string [PK, FK]
+    +SoLuongDinhMuc: float
+    +DonViTinh: string
+    +GhiChu: string
+    +NgayCapNhat: datetime
+}
+
+class DonSanXuat {
+    +MaDon: int [PK]
+    +MaSanPham: string [FK]
+    +SoLuongYeuCau: int
+    +HanGiao: date
+    +TrangThai: string
+    +NgayTao: datetime
+    +GhiChu: string
+    --
+    +tinhTienDoTong(): float
+}
+
+class KeHoachSanXuat {
+    +MaKeHoach: int [PK]
+    +MaDon: int [FK]
+    +NgayBatDau: date
+    +NgayKetThuc: date
+}
+
+class CongDoan {
+    +MaCongDoan: int [PK]
+    +MaSanPham: string [FK]
+    +TenCongDoan: string
+    +ThuTu: int
+    +MoTa: string
+    +TrangThai: string
+    +NgayCapNhat: datetime
+}
+
+class PhanCong {
+    +MaPhanCong: int [PK]
+    +MaCongDoan: int [FK]
+    +MaTaiKhoan: int [FK]
+    +MaDon: int [FK, DeXuat]
+    +NgayPhanCong: date
+}
+
+class TienDoCongDoan {
+    +MaTienDo: int [PK]
+    +MaCongDoan: int [FK]
+    +MaDon: int [FK, DeXuat]
+    +SoLuongHoanThanh: int
+    +TrangThai: string
+    +NgayCapNhat: datetime
+}
+
+class SuDungNguyenLieu {
+    +MaSuDung: int [PK]
+    +MaDon: int [FK]
+    +MaCongDoan: int [FK]
+    +MaNguyenLieu: string [FK]
+    +SoLuongSuDung: float
+    +NgayGhiNhan: datetime
+}
+
+class LoiSanXuat {
+    +MaLoi: int [PK]
+    +MaDon: int [FK]
+    +MaCongDoan: int [FK]
+    +MoTaLoi: string
+    +SoLuongHong: int
+}
+
+' Quan hệ giữa các thực thể Domain
+SanPham "1" *-- "1..*" DinhMucNguyenLieu : có định mức >
+NguyenLieu "1" *-- "0..*" DinhMucNguyenLieu : được dùng trong >
+
+SanPham "1" -- "0..*" DonSanXuat : tạo đơn >
+SanPham "1" *-- "1..*" CongDoan : quy định các bước >
+
+DonSanXuat "1" *-- "1..*" KeHoachSanXuat : có kế hoạch >
+DonSanXuat "1" -- "0..*" SuDungNguyenLieu : tiêu hao vật tư >
+DonSanXuat "1" -- "0..*" LoiSanXuat : ghi nhận lỗi >
+DonSanXuat "1" -- "0..*" TienDoCongDoan : theo dõi tiến độ >
+
+CongDoan "1" -- "0..*" PhanCong : phân công nhân sự >
+TaiKhoan "1" -- "0..*" PhanCong : được giao nhiệm vụ >
+
+CongDoan "1" -- "0..*" TienDoCongDoan : đo lường tiến độ >
+CongDoan "1" -- "0..*" SuDungNguyenLieu : tiêu hao tại công đoạn >
+CongDoan "1" -- "0..*" LoiSanXuat : phát sinh lỗi tại >
+NguyenLieu "1" -- "0..*" SuDungNguyenLieu : vật liệu được dùng >
+
+@enduml

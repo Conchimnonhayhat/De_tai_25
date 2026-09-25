@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{% block title %}Quản Lý Xưởng Sản Xuất Nhỏ{% endblock %} - AI Workshop</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    {% block extra_css %}{% endblock %}
+    <script>
+        (function() {
+            const saved = localStorage.getItem('theme');
+            if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.setAttribute('data-theme', 'dark');
+            } else {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+        })();
+    </script>
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <i class="fa-solid fa-industry brand-icon"></i>
+                <div class="brand-text">
+                    <h2>AI WORKSHOP</h2>
+                    <span>Hệ Thống Quản Lý Xưởng</span>
+                </div>
+            </div>
+
+            <nav class="nav-menu">
+                {% if session.get('user_role') != 'Admin' %}
+                <a href="{{ url_for('workshop.dashboard') }}" class="nav-item {% if request.endpoint == 'workshop.dashboard' %}active{% endif %}">
+                    <i class="fa-solid fa-gauge-high"></i>
+                    <span>Tổng Quan (Dashboard)</span>
+                </a>
+                {% if session.get('user_role') in ['QuanLyXuong', 'ToTruong'] %}<a href="{{ url_for('workshop.products') }}" class="nav-item {% if request.endpoint == 'workshop.products' %}active{% endif %}">
+                    <i class="fa-solid fa-boxes-stacked"></i>
+                    <span>Sản Phẩm & Định Mức</span>
+                </a>{% endif %}
+                <a href="{{ url_for('workshop.orders') }}" class="nav-item {% if request.endpoint == 'workshop.orders' %}active{% endif %}">
+                    <i class="fa-solid fa-clipboard-list"></i>
+                    <span>Đơn Hàng Sản Xuất</span>
+                </a>
+                <a href="{{ url_for('workshop.production') }}" class="nav-item {% if request.endpoint == 'workshop.production' %}active{% endif %}">
+                    <i class="fa-solid fa-gears"></i>
+                    <span>Điều Hành Công Đoạn</span>
+                </a>
+                {% if session.get('user_role') in ['QuanLyXuong', 'ToTruong'] %}
+                <a href="{{ url_for('workshop.daily_reports') }}" class="nav-item {% if request.endpoint == 'workshop.daily_reports' %}active{% endif %}">
+                    <i class="fa-solid fa-clipboard-check"></i>
+                    <span>Báo Cáo Cuối Ngày</span>
+                </a>
+                {% endif %}
+                {% if session.get('user_role') in ['QuanLyXuong', 'ToTruong'] %}<a href="{{ url_for('workshop.inventory') }}" class="nav-item {% if request.endpoint == 'workshop.inventory' %}active{% endif %}">
+                    <i class="fa-solid fa-warehouse"></i>
+                    <span>Kho Nguyên Vật Liệu</span>
+                </a>{% endif %}
+                {% if session.get('user_role') == 'QuanLyXuong' %}<a href="{{ url_for('workshop.statistics') }}" class="nav-item {% if request.endpoint == 'workshop.statistics' %}active{% endif %}">
+                    <i class="fa-solid fa-chart-line"></i>
+                    <span>Báo Cáo & Thống Kê</span>
+                </a>{% endif %}
+                {% if session.get('user_role') == 'QuanLyXuong' %}<a href="{{ url_for('workshop.teams') }}" class="nav-item {% if request.endpoint == 'workshop.teams' %}active{% endif %}">
+                    <i class="fa-solid fa-users"></i><span>Thành Viên Tổ</span>
+                </a>{% endif %}
+
+                {% if session.get('user_role') in ['QuanLyXuong', 'ToTruong'] %}
+                <div class="nav-divider"></div>
+                <div class="nav-label">TRỢ LÝ THÔNG MINH</div>
+
+                <a href="{{ url_for('ai.assistant_page') }}" class="nav-item ai-nav {% if request.endpoint == 'ai.assistant_page' %}active{% endif %}">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    <span>Trợ Lý AI Sản Xuất</span>
+                </a>
+                {% endif %}
+                {% endif %}
+
+                {% if session.get('user_role') == 'Admin' %}
+                <div class="nav-divider"></div>
+                <div class="nav-label">QUẢN TRỊ</div>
+                <a href="{{ url_for('auth.manage_users') }}" class="nav-item {% if request.endpoint == 'auth.manage_users' %}active{% endif %}">
+                    <i class="fa-solid fa-users-gear"></i>
+                    <span>Quản Lý Tài Khoản</span>
+                </a>
+                {% endif %}
+            </nav>
+
+            <div class="user-profile">
+                <div class="user-avatar">
+                    <i class="fa-solid fa-user-gear"></i>
+                </div>
+                <div class="user-info">
+                    <span class="user-name">{{ session.get('user_name', 'Người dùng') }}</span>
+                    <span class="badge badge-role">{{ session.get('user_role', 'NhanVien') }}</span>
+                </div>
+                <form action="{{ url_for('auth.logout') }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn-logout" title="Đăng xuất" aria-label="Đăng xuất">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                    </button>
+                </form>
+            </div>
+        </aside>
+
+        <!-- Main Workspace -->
+        <main class="main-content">
+            <!-- Header Bar -->
+            <header class="topbar">
+                <div class="page-title">
+                    <h1>{% block page_title %}Tổng Quan Xưởng{% endblock %}</h1>
+                    <p class="subtitle">{% block page_subtitle %}Hệ thống hỗ trợ AI-Augmented SDLC{% endblock %}</p>
+                </div>
+                <div class="topbar-actions">
+                    <div class="topbar-button-group">
+                        {% block header_actions %}{% endblock %}
+                    </div>
+                    <button type="button" id="themeToggleBtn" class="theme-toggle-btn" title="Chuyển chế độ Giao diện Sáng / Tối" aria-label="Chuyển chế độ Giao diện Sáng / Tối">
+                        <i class="fa-solid fa-moon theme-toggle-icon" id="themeToggleIcon"></i>
+                    </button>
+                    <span class="status-indicator live">
+                        <span class="dot"></span> CSDL Đồng bộ
+                    </span>
+                </div>
+            </header>
+
+            <!-- Flash Notifications -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="flash-messages">
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }}">
+                                <i class="fa-solid {% if category == 'success' %}fa-circle-check{% elif category == 'danger' %}fa-circle-exclamation{% else %}fa-circle-info{% endif %}"></i>
+                                <span>{{ message }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <!-- Dynamic Body Content -->
+            <div class="content-body">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

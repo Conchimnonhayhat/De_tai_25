@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='production_ai.css') }}">
+{% endblock %}
+
+{% block page_title %}Trợ Lý AI Sản Xuất (Gemini AI Assistant){% endblock %}
+{% block page_subtitle %}Hỗ trợ ra quyết định thông minh: Tóm tắt tiến độ, Phân tích lỗi và Gợi ý ưu tiên đơn (FR-15, FR-16, FR-17){% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('workshop.production') }}" class="btn btn-outline" style="border-radius: 9999px;">
+    <i class="fa-solid fa-gears"></i> Điều Hành Công Đoạn
+</a>
+<a href="{{ url_for('workshop.orders') }}" class="btn btn-primary" style="border-radius: 9999px;">
+    <i class="fa-solid fa-clipboard-list"></i> Danh Sách Đơn
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="ai-dashboard">
+    <!-- Top AI Capability Indicator Strip -->
+    <div class="ai-hero-strip">
+        <div class="ai-hero-badge">
+            <i class="fa-solid fa-wand-magic-sparkles text-purple"></i> {{ (model_name | upper) if model_name else 'GEMINI-3.5-FLASH-LITE' }} PROMPT & ANALYTICS
+        </div>
+        <div class="ai-status-pill">
+            <span class="pulse-dot"></span>
+            <span>CSDL Đồng Bộ Thời Gian Thực</span>
+        </div>
+    </div>
+
+    <!-- Mode Selection Tabs (Pill style - Bo tròn mềm mại) -->
+    <div class="ai-tabs-container">
+        <div class="ai-tabs" role="tablist">
+            <button type="button" class="tab-btn active" data-mode="progress_summary" onclick="switchMode('progress_summary')">
+                <i class="fa-solid fa-chart-pie"></i>
+                <div class="tab-label-group">
+                    <span class="tab-main-label">Tóm Tắt Tiến Độ (FR-15)</span>
+                    <span class="tab-sub-label">Tình trạng đơn & tiến độ công đoạn</span>
+                </div>
+            </button>
+            <button type="button" class="tab-btn" data-mode="defect_analysis" onclick="switchMode('defect_analysis')">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <div class="tab-label-group">
+                    <span class="tab-main-label">Phân Tích Mô Tả Lỗi (FR-16)</span>
+                    <span class="tab-sub-label">Gom nhóm & giả thuyết kỹ thuật</span>
+                </div>
+            </button>
+            {% if session.get('user_role') == 'QuanLyXuong' %}
+            <button type="button" class="tab-btn" data-mode="order_priority" onclick="switchMode('order_priority')">
+                <i class="fa-solid fa-arrow-up-wide-short"></i>
+                <div class="tab-label-group">
+                    <span class="tab-main-label">Gợi Ý Ưu Tiên Đơn (FR-17)</span>
+                    <span class="tab-sub-label">Tối ưu lịch giao & vật tư</span>
+                </div>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- AI Studio Prompt Box (Bố trí hợp lý, thanh prompt to rộng, nút bo tròn) -->
+    <div class="card ai-studio-card">
+        <div class="card-body">
+            <form id="aiRequestForm" class="ai-form">
+                <input type="hidden" id="selectedMode" name="task_type" value="progress_summary">
+
+                <!-- Row 1: Scope Context Selector (Rõ ràng, trực quan, không chen chúc) -->
+                <div class="ai-context-row">
+                    <!-- Order Selector -->
+                    <div class="form-group" id="orderFilterGroup" style="margin-bottom: 0; flex: 1;">
+                        <label for="aiOrderSelect" class="ai-label">
+                            <i class="fa-solid fa-box-archive text-primary"></i> Đơn Sản Xuất Cần Phân Tích:
+                        </label>
+                        <div class="select-wrapper">
+                            <select id="aiOrderSelect" name="order_id" class="ai-select">
+                                {% for o in orders %}
+                                <option value="{{ o.id }}">Đơn #{{ o.id }} — {{ o.product_name }} (SL: {{ o.quantity_requested }} sp | Hạn: {{ o.due_date }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Max suggestions (for priority) -->
+                    <div class="form-group" id="suggestionLimitGroup" style="display: none; margin-bottom: 0; min-width: 220px;">
+                        <label for="maxSuggestions" class="ai-label">
+                            <i class="fa-solid fa-list-ol text-purple"></i> Số lượng đơn gợi ý:
+                        </label>
+                        <input type="number" id="maxSuggestions" name="max_suggestions" value="3" min="1" max="5" class="ai-input">
+                    </div>
+                </div>
+
+                <!-- Row 2: Prompt Studio (Thanh nhập prompt TO, RỘNG, DỄ NHÌN) -->
+                <div class="ai-prompt-area">
+                    <div class="prompt-header-row">
+                        <label for="aiPromptText" class="ai-label">
+                            <i class="fa-solid fa-sparkles text-purple"></i> Câu Hỏi Hoặc Yêu Cầu Phân Tích Bổ Sung (Tiếng Việt):
+                        </label>
+                        <span class="ai-tag-tip"><i class="fa-regular fa-keyboard"></i> Nhập câu hỏi hoặc chọn gợi ý bên dưới</span>
+                    </div>
+
+                    <!-- Large Multi-line Textarea -->
+                    <div class="textarea-container">
+                        <textarea id="aiPromptText" name="prompt" rows="3" class="ai-prompt-textarea" 
+                            placeholder="Ví dụ: Tóm tắt tiến độ đơn và các công đoạn có nguy cơ chậm..."></textarea>
+                    </div>
+
+                    <!-- Quick Prompt Suggestions (Bo tròn pill buttons) -->
+                    <div class="ai-quick-prompts">
+                        <span class="quick-title"><i class="fa-regular fa-lightbulb text-warning"></i> Gợi ý nhanh:</span>
+                        
+                        <!-- Chips for progress_summary -->
+                        <button type="button" class="ai-quick-chip" data-mode="progress_summary" data-prompt="Tóm tắt tiến độ đơn và các công đoạn có nguy cơ chậm hạn">
+                            <i class="fa-solid fa-arrow-trend-up text-primary"></i> Tiến độ & nguy cơ trễ
+                        </button>
+                        <button type="button" class="ai-quick-chip" data-mode="progress_summary" data-prompt="Đơn này hiện đã hoàn thành bao nhiêu %, công đoạn nào đang thi công?">
+                            <i class="fa-solid fa-list-check text-success"></i> % Hoàn thành & bước hiện tại
+                        </button>
+
+                        <!-- Chips for defect_analysis -->
+                        <button type="button" class="ai-quick-chip" data-mode="defect_analysis" style="display: none;" data-prompt="Phân tích các lỗi phát sinh của đơn này và gom nhóm nguyên nhân kỹ thuật">
+                            <i class="fa-solid fa-triangle-exclamation text-danger"></i> Phân tích & gom nhóm lỗi
+                        </button>
+                        <button type="button" class="ai-quick-chip" data-mode="defect_analysis" style="display: none;" data-prompt="Công đoạn nào phát sinh tỷ lệ phế phẩm cao nhất và biện pháp khắc phục?">
+                            <i class="fa-solid fa-shield-virus text-warning"></i> Công đoạn lỗi nhiều nhất
+                        </button>
+
+                        <!-- Chips for order_priority -->
+                        <button type="button" class="ai-quick-chip" data-mode="order_priority" style="display: none;" data-prompt="Gợi ý các đơn cần ưu tiên dựa trên hạn giao và vật tư khả dụng">
+                            <i class="fa-solid fa-ranking-star text-purple"></i> Đơn cần ưu tiên tuần này
+                        </button>
+                        <button type="button" class="ai-quick-chip" data-mode="order_priority" style="display: none;" data-prompt="Đơn nào có nguy cơ trễ hạn bàn giao cao nhất cần tăng cường nhân lực gấp?">
+                            <i class="fa-solid fa-clock-rotate-left text-danger"></i> Đơn nguy cơ trễ hạn cao
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Row 3: Action Toolbar (Bo tròn, nút CTA to đẹp) -->
+                <div class="ai-studio-footer">
+                    <div class="footer-status">
+                        <span id="aiSnapshotTime" class="text-muted small">
+                            <i class="fa-solid fa-circle-check text-success"></i> Snapshot CSDL: Sẵn sàng phân tích
+                        </span>
+                    </div>
+                    <button type="button" id="btnRunAI" class="btn btn-ai-run" onclick="submitAITask()">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Phân Tích Với Trợ Lý AI
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- AI Output & Staging Display -->
+    <div class="ai-result-section">
+        <!-- Loading State -->
+        <div id="aiLoadingIndicator" class="loading-box" style="display: none;">
+            <div class="spinner"></div>
+            <h4>Đang truy xuất Snapshot CSDL và đối chiếu với Gemini AI...</h4>
+            <p class="text-muted">Hệ thống đang kiểm tra số liệu định lượng (anti-hallucination) để bảo đảm độ chính xác 100%.</p>
+        </div>
+
+        <!-- Result Card -->
+        <div id="aiResultCard" class="card result-card" style="display: none;">
+            <div class="card-header bg-gradient-ai">
+                <div class="result-header-left">
+                    <div class="ai-avatar-icon">
+                        <i class="fa-solid fa-robot"></i>
+                    </div>
+                    <div>
+                        <h3 id="resultHeaderTitle" style="margin: 0; font-size: 16px;">Kết Quả Phân Tích Từ Trợ Lý AI</h3>
+                        <p class="text-muted" style="margin: 2px 0 0; font-size: 12.5px;">Báo cáo số liệu và suy luận đối chiếu đa tầng</p>
+                    </div>
+                </div>
+                <span id="resultStatusBadge" class="badge badge-success status-pill-badge">ĐÃ XÁC MINH</span>
+            </div>
+            <div class="card-body">
+                <!-- AI Summary Narrative -->
+                <div class="summary-box">
+                    <h4><i class="fa-solid fa-file-lines text-primary"></i> Diễn Giải Tổng Quan:</h4>
+                    <p id="aiSummaryContent" class="summary-text"></p>
+                </div>
+
+                <!-- Structured Facts Verified -->
+                <div class="facts-section mt-4">
+                    <h5><i class="fa-solid fa-shield-halved text-success"></i> Dữ Kiện Định Lượng Đã Được Backend Xác Minh (Facts):</h5>
+                    <div id="aiFactsContainer" class="facts-grid"></div>
+                </div>
+
+                <!-- Dynamic Content: Groups, Recommendations, or Hypotheses -->
+                <div id="aiDynamicSection" class="mt-4"></div>
+
+                <!-- Source IDs Traceability -->
+                <div class="source-trace-box mt-4">
+                    <div class="source-trace-header">
+                        <span id="aiProvider" class="text-muted small"></span>
+                        <span class="text-muted small"><strong>Mã bản ghi nguồn truy vết (source_ids):</strong></span>
+                    </div>
+                    <div id="aiSourceIds" class="source-badges"></div>
+                </div>
+
+                <!-- Manager reviews the suggestion before changing a plan manually. -->
+                {% if session.get('user_role') == 'QuanLyXuong' %}
+                <div id="humanActionBox" class="human-review-bar mt-4" style="display: none;">
+                    <div class="review-prompt">
+                        <i class="fa-solid fa-user-check"></i>
+                        <span><strong>Quản lý xưởng:</strong> Đối chiếu gợi ý với tình hình thực tế, sau đó cập nhật kế hoạch nếu cần.</span>
+                    </div>
+                    <a href="{{ url_for('workshop.orders') }}" class="btn btn-sm btn-outline" style="border-radius: 9999px;">Mở đơn và kế hoạch</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='production_ai.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,53 @@
+@startuml
+skinparam sequenceMessageAlign center
+skinparam shadowing false
+autonumber
+
+actor "Tổ trưởng / Nhân viên\n(User)" as User
+boundary "Giao Diện Web\n(UI Form)" as UI
+control "Workshop Controller\n(routes/workshop_routes.py)" as Controller
+participant "Production Service\n(services/production_service.py)" as Service
+participant "Database DAO\n(database/db.py)" as DAO
+database "MySQL Database" as DB
+
+User -> UI: Nhập số lượng hoàn thành công đoạn\n(MaDon, MaCongDoan, SoLuongMoi)
+UI -> Controller: POST /api/progress/update (JSON / Form Data)
+
+Controller -> Controller: Kiểm tra Session & Quyền RBAC\n(Tổ trưởng hoặc Nhân viên được phân công)
+
+alt Quyền không hợp lệ
+    Controller --> UI: 403 Forbidden ("Bạn không có quyền thực hiện")
+    UI --> User: Hiển thị thông báo từ chối
+else Quyền hợp lệ
+    Controller -> Service: update_progress(MaDon, MaCongDoan, SoLuongMoi, user_id)
+    
+    Service -> DAO: Bắt đầu Database Transaction (BEGIN)
+    
+    Service -> DAO: Lấy thông tin công đoạn trước & Đơn sản xuất
+    DAO -> DB: SELECT SoLuongYeuCau, ThuTu FROM ...
+    DB --> DAO: Trả về kết quả
+    DAO --> Service: Dữ liệu công đoạn
+    
+    Service -> Service: Kiểm tra ràng buộc:\n1. SoLuongMoi > 0\n2. SoLuongMoi <= SoLuongYeuCau\n3. SoLuongMoi <= Sản lượng công đoạn trước liền kề
+    
+    alt Vi phạm ràng buộc số lượng / thứ tự công đoạn
+        Service -> DAO: ROLLBACK Transaction
+        DAO -> DB: ROLLBACK
+        Service --> Controller: Error ("Sản lượng vượt công đoạn trước hoặc số lượng âm")
+        Controller --> UI: 400 Bad Request
+        UI --> User: Hiển thị cảnh báo lỗi dữ liệu
+    else Hợp lệ
+        Service -> DAO: Cập nhật SoLuongHoanThanh, TrangThai, NgayCapNhat
+        DAO -> DB: UPDATE TienDoCongDoan SET SoLuongHoanThanh = ..., TrangThai = ...
+        DB --> DAO: Success (Rows affected: 1)
+        
+        Service -> DAO: COMMIT Transaction
+        DAO -> DB: COMMIT
+        
+        Service --> Controller: Success (ProgressUpdatedEvent)
+        Controller --> UI: 200 OK ("Cập nhật tiến độ thành công")
+        UI --> User: Cập nhật thanh tiến độ trực quan trên màn hình
+    end
+end
+
+@enduml

@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block page_title %}Báo Cáo Cuối Ngày{% endblock %}
+{% block page_subtitle %}Tổ trưởng nộp kết quả hàng ngày; Quản lý xưởng theo dõi, xem xét và xác nhận{% endblock %}
+
+{% block header_actions %}
+{% if session.get('user_role') == 'ToTruong' %}
+<button type="button" class="btn btn-primary" onclick="toggleReportDrawer()">
+    <i class="fa-solid fa-file-pen"></i> Nộp Báo Cáo Mới
+</button>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% if session.get('user_role') == 'ToTruong' %}
+<div class="action-drawer" id="reportDrawer" style="display: none;">
+    <div class="action-drawer-header" onclick="toggleReportDrawer()">
+        <h3><i class="fa-solid fa-file-pen text-primary"></i> Nộp Kết Quả Ngày Làm Việc</h3>
+        <button type="button" class="btn btn-ghost btn-xs"><i class="fa-solid fa-xmark"></i> Đóng</button>
+    </div>
+    <div class="action-drawer-body">
+        <form method="POST" class="standard-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-row">
+                <div class="form-group col-6">
+                    <label for="report-order">Đơn được phân công *</label>
+                    <select id="report-order" name="order_id" required>
+                        {% for order in orders %}
+                        <option value="{{ order.id }}">Đơn #{{ order.id }} - {{ order.product_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group col-6">
+                    <label for="report-date">Ngày làm việc *</label>
+                    <input id="report-date" type="date" name="report_date" value="{{ today }}" max="{{ today }}" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group col-6">
+                    <label for="completed">Sản phẩm hoàn thành trong ngày *</label>
+                    <input id="completed" type="number" name="completed" min="0" value="0" required>
+                </div>
+                <div class="form-group col-6">
+                    <label for="defective">Sản phẩm hỏng trong ngày *</label>
+                    <input id="defective" type="number" name="defective" min="0" value="0" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="report-note">Diễn biến, khó khăn và vật tư cần bổ sung</label>
+                <textarea id="report-note" name="note" rows="3" placeholder="Ghi rõ công đoạn, sự cố phát sinh và đề xuất kỹ thuật"></textarea>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn btn-outline" onclick="toggleReportDrawer()">Hủy bỏ</button>
+                <button type="submit" class="btn btn-primary" {% if not orders %}disabled{% endif %}>
+                    <i class="fa-solid fa-paper-plane"></i> Gửi Quản Lý Xưởng
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-header">
+        <h3><i class="fa-solid fa-clipboard-check text-primary"></i> Danh Sách Báo Cáo Cuối Ngày</h3>
+        {% if session.get('user_role') == 'ToTruong' %}
+        <button type="button" class="btn btn-sm btn-outline" onclick="toggleReportDrawer()">
+            <i class="fa-solid fa-plus"></i> Nộp báo cáo
+        </button>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        <form method="GET" class="filter-form" aria-label="Tìm và lọc báo cáo">
+            <input type="search" name="q" value="{{ q }}" placeholder="Tìm theo mã đơn hoặc tên tổ trưởng..." aria-label="Từ khóa báo cáo">
+            <input type="date" name="date" value="{{ report_date }}" aria-label="Ngày báo cáo">
+            <select name="status" aria-label="Trạng thái báo cáo">
+                <option value="">Tất cả trạng thái</option>
+                <option value="Pending" {% if status_filter == 'Pending' %}selected{% endif %}>Chờ xem</option>
+                <option value="Reviewed" {% if status_filter == 'Reviewed' %}selected{% endif %}>Đã xem</option>
+            </select>
+            <button type="submit" class="btn btn-primary">
+                <i class="fa-solid fa-filter"></i> Lọc
+            </button>
+            <a href="{{ url_for('workshop.daily_reports') }}" class="btn btn-outline" title="Xóa lọc">
+                <i class="fa-solid fa-rotate-left"></i> Xóa lọc
+            </a>
+        </form>
+
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th style="width: 12%;">Ngày</th>
+                        <th style="width: 22%;">Đơn Hàng</th>
+                        <th style="width: 16%;">Tổ Trưởng</th>
+                        <th style="width: 12%;">Hoàn Thành</th>
+                        <th style="width: 10%;">Hỏng</th>
+                        <th style="width: 14%;">Ghi Chú</th>
+                        <th style="width: 8%;">Trạng Thái</th>
+                        <th style="width: 6%; text-align: right;">Thao Tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in reports %}
+                    <tr>
+                        <td><strong>{{ r.NgayBaoCao }}</strong></td>
+                        <td>#{{ r.MaDon }} – {{ r.TenSanPham }}</td>
+                        <td>
+                            <div class="account-cell">
+                                <div class="account-avatar" style="width:28px;height:28px;flex:0 0 28px;font-size:11px;">{{ r.TenToTruong[:1]|upper }}</div>
+                                <span>{{ r.TenToTruong }}</span>
+                            </div>
+                        </td>
+                        <td><span class="badge badge-success">{{ r.SoLuongHoanThanh }} đạt</span></td>
+                        <td>
+                            {% if r.SoLuongHong > 0 %}
+                            <span class="badge badge-danger">{{ r.SoLuongHong }} lỗi</span>
+                            {% else %}
+                            <span class="text-muted">0</span>
+                            {% endif %}
+                        </td>
+                        <td><small class="text-muted">{{ r.GhiChu or '—' }}</small></td>
+                        <td>
+                            <span class="badge {% if r.TrangThai == 'Pending' %}badge-warning{% else %}badge-success{% endif %}">
+                                {{ 'Chờ xem' if r.TrangThai == 'Pending' else 'Đã xem' }}
+                            </span>
+                        </td>
+                        <td style="text-align: right;">
+                            {% if session.get('user_role') == 'QuanLyXuong' and r.TrangThai == 'Pending' %}
+                            <form action="{{ url_for('workshop.review_daily_report', report_id=r.MaBaoCao) }}" method="POST" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-primary" title="Xác nhận đã xem báo cáo này">
+                                    <i class="fa-solid fa-check"></i> Xác nhận
+                                </button>
+                            </form>
+                            {% else %}—{% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="8" class="empty-state">Không tìm thấy báo cáo nào phù hợp với bộ lọc.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleReportDrawer() {
+    const drawer = document.getElementById('reportDrawer');
+    if (drawer) {
+        if (drawer.style.display === 'none' || drawer.style.display === '') {
+            drawer.style.display = 'block';
+            drawer.scrollIntoView({ behavior: 'smooth' });
+        } else {
+            drawer.style.display = 'none';
+        }
+    }
+}
+</script>
+{% endblock %}

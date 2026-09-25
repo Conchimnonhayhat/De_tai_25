@@ -1,0 +1,546 @@
+{% extends "base.html" %}
+
+{% block page_title %}Quản Lý Đơn Sản Xuất & Kế Hoạch{% endblock %}
+{% block page_subtitle %}Theo dõi yêu cầu sản xuất, thời hạn bàn giao và tính toán khả thi vật tư kho{% endblock %}
+
+{% block header_actions %}
+{% if session.get('user_role') == 'QuanLyXuong' %}
+<button type="button" class="btn btn-primary" onclick="openCreateOrderModal()" style="border-radius: 9999px;">
+    <i class="fa-solid fa-plus-circle"></i> Tiếp Nhận Đơn Mới
+</button>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% set incomplete_orders = orders|rejectattr('status', 'equalto', 'Hoàn thành')|rejectattr('status', 'equalto', 'Hủy')|list %}
+{% set in_progress_orders = orders|selectattr('status', 'equalto', 'Đang thực hiện')|list %}
+{% set completed_orders = orders|selectattr('status', 'equalto', 'Hoàn thành')|list %}
+{% set canceled_orders = orders|selectattr('status', 'equalto', 'Hủy')|list %}
+
+<!-- Quick Summary Stats Bar -->
+<div class="summary-pills-row">
+    <div class="summary-pill">
+        <i class="fa-solid fa-clipboard-list text-primary"></i>
+        <span>Đơn phù hợp: <strong>{{ orders|length }}</strong></span>
+    </div>
+    <div class="summary-pill">
+        <i class="fa-solid fa-clock-rotate-left text-warning"></i>
+        <span>Chưa hoàn thành: <strong>{{ incomplete_orders|length }}</strong></span>
+    </div>
+    <div class="summary-pill">
+        <i class="fa-solid fa-spinner text-primary"></i>
+        <span>Đang thực hiện: <strong>{{ in_progress_orders|length }}</strong></span>
+    </div>
+    <div class="summary-pill">
+        <i class="fa-solid fa-circle-check text-success"></i>
+        <span>Đã hoàn thành: <strong>{{ completed_orders|length }}</strong></span>
+    </div>
+</div>
+
+<!-- Macro to render a single order card cleanly -->
+{% macro render_order_card(o) %}
+<div class="order-card {% if o.status == 'Hoàn thành' %}card-completed{% elif o.status == 'Đang thực hiện' %}card-in-progress{% elif o.status == 'Hủy' %}card-canceled{% else %}card-pending{% endif %}" data-order-status="{{ o.status }}">
+    <div class="order-header-line">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <span class="badge badge-primary" style="font-size: 13px; font-weight: 700; padding: 5px 12px;">Đơn #{{ o.id }}</span>
+            <strong style="font-size: 15px; color: #0f172a;">{{ o.product_name }}</strong>
+            <code style="color: #64748b;">({{ o.product_id }})</code>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="badge" style="background:#f1f5f9; color:#475569; font-weight:500;">
+                <i class="fa-solid fa-calendar-days text-primary"></i> Hạn: {{ o.due_date }}
+            </span>
+            <span class="badge {% if o.status == 'Hoàn thành' %}badge-success{% elif o.status == 'Đang thực hiện' %}badge-warning{% elif o.status == 'Hủy' %}badge-danger{% else %}badge-info{% endif %}">
+                {% if o.status == 'Hoàn thành' %}<i class="fa-solid fa-circle-check"></i> {% endif %}{{ o.status }}
+            </span>
+        </div>
+    </div>
+
+    <div class="order-details-grid">
+        <div>
+            <span class="text-muted" style="font-size: 12px; display: block;">Số lượng đặt</span>
+            <strong style="font-size: 16px; color: #0f172a;">{{ o.quantity_requested }}</strong> sản phẩm
+        </div>
+        <div>
+            <span class="text-muted" style="font-size: 12px; display: block;">Ghi chú / Khách hàng</span>
+            <span style="color: #334155;">{{ o.note or 'Không có ghi chú' }}</span>
+        </div>
+    </div>
+
+    <!-- Action buttons dedicated row -->
+    <div class="order-actions">
+        <a href="{{ url_for('workshop.production', order_id=o.id) }}" class="btn btn-sm btn-soft-primary">
+            <i class="fa-solid fa-gears"></i> Điều hành công đoạn
+        </a>
+        {% if session.get('user_role') == 'QuanLyXuong' %}
+        <button type="button" class="btn btn-sm btn-outline edit-order-btn"
+            data-id="{{ o.id }}"
+            data-product-id="{{ o.product_id }}"
+            data-quantity="{{ o.quantity_requested }}"
+            data-due-date="{{ o.due_date }}"
+            data-status="{{ o.status }}"
+            data-note="{{ o.note or '' }}"
+            aria-label="Sửa đơn hàng #{{ o.id }}"
+            title="Chỉnh sửa thông tin đơn hàng">
+            <i class="fa-solid fa-pen-to-square"></i> Sửa đơn
+        </button>
+        {% if o.status == 'Hoàn thành' %}
+        <button type="button" class="btn btn-sm btn-secondary" disabled title="Không thể xóa đơn hàng đã hoàn thành">
+            <i class="fa-solid fa-lock"></i> Đã hoàn thành
+        </button>
+        {% else %}
+        <form action="{{ url_for('workshop.delete_order', order_id=o.id) }}" method="POST" class="order-delete-form" style="margin: 0;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="delete_token" value="{{ session.get('_order_delete_token', '') }}">
+            <button type="submit" class="btn btn-sm btn-soft-danger" aria-label="Xóa đơn hàng #{{ o.id }}" data-order-id="{{ o.id }}" title="Xóa đơn hàng">
+                <i class="fa-solid fa-trash-can"></i> Xóa đơn
+            </button>
+        </form>
+        {% endif %}
+        {% endif %}
+    </div>
+
+    <!-- Kế hoạch sản xuất -->
+    <div class="bom-section" style="margin-top: 14px; padding: 14px; background: #fafbfc; border-radius: 10px; border: 1px solid #f1f5f9;">
+        <h5 style="margin-bottom: 10px; font-size: 13px; color: #334155; display: flex; align-items: center; gap: 7px;">
+            <i class="fa-solid fa-calendar-check text-primary"></i> Kế hoạch thời gian sản xuất:
+        </h5>
+        {% set order_plans = plans.get(o.id, []) %}
+        {% if order_plans %}
+        {% for plan in order_plans %}
+        {% if session.get('user_role') == 'QuanLyXuong' %}
+        <form action="{{ url_for('workshop.update_plan', plan_id=plan.id) }}" method="POST" class="plan-item-box" style="margin-bottom: 8px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="plan-dates">
+                <span class="badge badge-light" style="background:#e2e8f0; font-weight:700;">#{{ plan.id }}</span>
+                <label style="margin: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px;">
+                    Bắt đầu:
+                    <input type="date" name="start_date" value="{{ plan.start_date }}" required style="padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12.5px;">
+                </label>
+                <label style="margin: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px;">
+                    Kết thúc:
+                    <input type="date" name="end_date" value="{{ plan.end_date }}" required style="padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12.5px;">
+                </label>
+            </div>
+            <button type="submit" class="btn btn-outline btn-xs" title="Lưu ngày kế hoạch">
+                <i class="fa-solid fa-floppy-disk"></i> Lưu
+            </button>
+        </form>
+        {% else %}
+        <p style="margin: 4px 0; font-size: 13px;"><i class="fa-regular fa-calendar"></i> Kế hoạch: <strong>{{ plan.start_date }}</strong> → <strong>{{ plan.end_date }}</strong></p>
+        {% endif %}
+        {% endfor %}
+        {% else %}
+        <p class="text-muted" style="font-size: 12.5px; margin: 4px 0;">Chưa thiết lập kế hoạch thời gian cho đơn này.</p>
+        {% endif %}
+
+        {% if session.get('user_role') == 'QuanLyXuong' %}
+        <form action="{{ url_for('workshop.create_plan', order_id=o.id) }}" method="POST" style="display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <span style="font-size: 12px; font-weight: 600; color: #64748b;">+ Thêm giai đoạn:</span>
+            <label style="margin: 0; font-size: 12px;">Từ: <input type="date" name="start_date" required style="padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px;"></label>
+            <label style="margin: 0; font-size: 12px;">Đến: <input type="date" name="end_date" required style="padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px;"></label>
+            <button type="submit" class="btn btn-primary btn-xs">
+                <i class="fa-solid fa-plus"></i> Thêm kế hoạch
+            </button>
+        </form>
+        {% endif %}
+    </div>
+
+    <!-- Đánh giá khả thi vật tư -->
+    {% set feas = feasibilities.get(o.id) %}
+    {% if feas %}
+    <div class="feasibility-box {% if feas.is_sufficient %}bg-feas-ok{% else %}bg-feas-warn{% endif %}">
+        <div class="feasibility-title" style="display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid {% if feas.is_sufficient %}fa-circle-check text-success{% else %}fa-triangle-exclamation text-danger{% endif %}"></i>
+            <strong>Vật tư cần cho {{ o.quantity_requested }} sản phẩm:</strong>
+            <span>{% if feas.is_sufficient %}Đủ vật tư khả dụng trong kho{% else %}Cảnh báo: Có nguyên vật liệu thiếu hụt!{% endif %}</span>
+        </div>
+        <div class="feasibility-items">
+            {% for d in feas.details %}
+            <span class="feas-badge {% if d.deficit > 0 %}badge-danger{% else %}badge-light{% endif %}" style="{% if d.deficit <= 0 %}background: #ffffff; border: 1px solid #e2e8f0;{% endif %}">
+                <strong>{{ d.material_name }}</strong>: cần {{ d.needed_quantity }} {{ d.unit }} / kho có {{ d.available_quantity }} {{ d.unit }} ({{ d.status }})
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endmacro %}
+
+<!-- Main Orders List Card -->
+<div class="card">
+    <div class="card-header">
+        <h3><i class="fa-solid fa-list-ol"></i> Quản Lý & Phân Loại Đơn Sản Xuất</h3>
+        {% if session.get('user_role') == 'QuanLyXuong' %}
+        <button type="button" class="btn btn-sm btn-outline" onclick="openCreateOrderModal()" style="border-radius: 9999px;">
+            <i class="fa-solid fa-plus"></i> Tạo đơn mới
+        </button>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        <!-- Quick Tab Controls to filter between All / Incomplete / Completed -->
+        <div class="orders-tab-control" role="tablist">
+            <button type="button" class="orders-tab-btn active" id="tab-btn-all" onclick="switchOrdersTab('all')">
+                <i class="fa-solid fa-layer-group"></i> Tất Cả Đơn ({{ orders|length }})
+            </button>
+            <button type="button" class="orders-tab-btn" id="tab-btn-incomplete" onclick="switchOrdersTab('incomplete')">
+                <i class="fa-solid fa-clock-rotate-left text-warning"></i> Chưa Hoàn Thành ({{ incomplete_orders|length }})
+            </button>
+            <button type="button" class="orders-tab-btn" id="tab-btn-inprogress" onclick="switchOrdersTab('inprogress')">
+                <i class="fa-solid fa-spinner text-primary"></i> Đang Thực Hiện ({{ in_progress_orders|length }})
+            </button>
+            <button type="button" class="orders-tab-btn" id="tab-btn-completed" onclick="switchOrdersTab('completed')">
+                <i class="fa-solid fa-circle-check text-success"></i> Đã Hoàn Thành ({{ completed_orders|length }})
+            </button>
+            {% if canceled_orders %}
+            <button type="button" class="orders-tab-btn" id="tab-btn-canceled" onclick="switchOrdersTab('canceled')">
+                <i class="fa-solid fa-ban text-danger"></i> Đã Hủy ({{ canceled_orders|length }})
+            </button>
+            {% endif %}
+        </div>
+
+        <!-- Search and Filter Form -->
+        <form method="GET" class="filter-form orders-filter-form" aria-label="Tìm và lọc đơn sản xuất">
+            <input class="order-search-field" type="search" name="q" value="{{ q }}" placeholder="Mã đơn, tên sản phẩm hoặc ghi chú..." aria-label="Từ khóa đơn sản xuất">
+            <select id="order-product-filter" name="product_id" aria-label="Lọc sản phẩm">
+                <option value="">Tất cả sản phẩm</option>
+                {% for product_id, product_name in filter_products %}
+                <option value="{{ product_id }}" {% if product_filter == product_id %}selected{% endif %}>{{ product_id }} — {{ product_name }}</option>
+                {% endfor %}
+            </select>
+            <select name="status" aria-label="Lọc trạng thái đơn">
+                <option value="">Tất cả trạng thái</option>
+                {% for status in order_statuses %}
+                <option value="{{ status }}" {% if status_filter == status %}selected{% endif %}>{{ status }}</option>
+                {% endfor %}
+            </select>
+            <select id="order-operation-filter" name="operation_id" aria-label="Lọc công đoạn được giao">
+                <option value="">Tất cả công đoạn được giao</option>
+                {% for op in operation_options %}
+                <option value="{{ op.id }}" data-product-id="{{ op.product_id }}" {% if operation_filter == op.id %}selected{% endif %}>{{ op.product_id }} · Bước {{ op.step_order }}: {{ op.name }}</option>
+                {% endfor %}
+            </select>
+            <select name="leader_id" aria-label="Lọc tổ trưởng phụ trách">
+                <option value="">Tất cả tổ trưởng phụ trách</option>
+                {% for leader in leader_options %}
+                <option value="{{ leader.id }}" {% if leader_filter == leader.id %}selected{% endif %}>{{ leader.name }} ({{ leader.id }})</option>
+                {% endfor %}
+            </select>
+            <label class="order-date-filter">Hạn giao từ <input type="date" name="due_from" value="{{ due_from }}"></label>
+            <label class="order-date-filter">Đến ngày <input type="date" name="due_to" value="{{ due_to }}"></label>
+            <div class="order-filter-actions">
+                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-filter"></i> Áp dụng bộ lọc</button>
+                <a href="{{ url_for('workshop.orders') }}" class="btn btn-outline" title="Xóa bộ lọc"><i class="fa-solid fa-rotate-left"></i> Xóa lọc</a>
+            </div>
+        </form>
+
+        {% if orders %}
+        <!-- SECTION 1: CÁC ĐƠN CHƯA HOÀN THÀNH / ĐANG THỰC HIỆN -->
+        <div id="orders-section-incomplete">
+            <div class="orders-section-header pending-section-header">
+                <div class="section-title">
+                    <span style="font-size: 20px;"><i class="fa-solid fa-clock-rotate-left"></i></span>
+                    <div>
+                        <h4>Đơn Hàng Chưa Hoàn Thành / Đang Triển Khai</h4>
+                        <p>Các công việc đang mở, cần theo dõi công đoạn, bổ sung vật tư và hoàn tất</p>
+                    </div>
+                </div>
+                <span class="badge badge-warning" style="font-size: 13px; font-weight: 700; padding: 6px 14px; border-radius: 999px;">
+                    {{ incomplete_orders|length }} đơn cần làm
+                </span>
+            </div>
+
+            <div id="incomplete-orders-list">
+                {% for o in incomplete_orders %}
+                {{ render_order_card(o) }}
+                {% endfor %}
+                {% if not incomplete_orders %}
+                <div class="orders-empty-box">
+                    <i class="fa-solid fa-circle-check text-success" style="font-size: 26px; margin-bottom: 8px; display: block;"></i>
+                    Không có đơn hàng nào chưa hoàn thành. Mọi công việc hiện tại đã được giải quyết xong!
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- SECTION 2: CÁC ĐƠN ĐÃ HOÀN THÀNH (LƯU TRỮ TÁCH BẠCH) -->
+        <div id="orders-section-completed">
+            <div class="orders-section-header completed-section-header">
+                <div class="section-title">
+                    <span style="font-size: 20px;"><i class="fa-solid fa-circle-check"></i></span>
+                    <div>
+                        <h4>Đơn Hàng Đã Hoàn Thành</h4>
+                        <p>Lưu trữ các đơn đã sản xuất xong 100% và nghiệm thu bàn giao thành công</p>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="badge badge-success" style="font-size: 13px; font-weight: 700; padding: 6px 14px; border-radius: 999px;">
+                        {{ completed_orders|length }} đơn hoàn tất
+                    </span>
+                    <button type="button" class="btn btn-outline btn-xs" id="btnToggleCompleted" onclick="toggleCompletedSection()" style="border-radius: 999px; background: #ffffff;">
+                        <i class="fa-solid fa-chevron-up" id="toggleCompletedIcon"></i> <span id="toggleCompletedText">Thu gọn</span>
+                    </button>
+                </div>
+            </div>
+
+            <div id="completed-orders-list">
+                {% for o in completed_orders %}
+                {{ render_order_card(o) }}
+                {% endfor %}
+                {% if not completed_orders %}
+                <div class="orders-empty-box">
+                    <i class="fa-solid fa-inbox" style="font-size: 26px; margin-bottom: 8px; display: block; color: #cbd5e1;"></i>
+                    Chưa có đơn hàng nào hoàn thành trong danh sách hiển thị hiện tại.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- SECTION 3: CÁC ĐƠN ĐÃ HỦY (NẾU CÓ) -->
+        {% if canceled_orders %}
+        <div id="orders-section-canceled">
+            <div class="orders-section-header canceled-section-header">
+                <div class="section-title">
+                    <span style="font-size: 20px;"><i class="fa-solid fa-ban"></i></span>
+                    <div>
+                        <h4>Đơn Hàng Đã Hủy</h4>
+                        <p>Các đơn đã bị dừng hoặc hủy bỏ</p>
+                    </div>
+                </div>
+                <span class="badge badge-danger" style="font-size: 13px; font-weight: 700; padding: 6px 14px; border-radius: 999px;">
+                    {{ canceled_orders|length }} đơn hủy
+                </span>
+            </div>
+
+            <div id="canceled-orders-list">
+                {% for o in canceled_orders %}
+                {{ render_order_card(o) }}
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <!-- Không có đơn nào phù hợp với bộ lọc -->
+        <div style="padding: 48px 20px; text-align: center; color: #64748b;">
+            <i class="fa-solid fa-clipboard-question" style="font-size: 40px; margin-bottom: 12px; color: #cbd5e1; display: block;"></i>
+            <h4 style="color: #334155; margin-bottom: 6px;">Không tìm thấy đơn sản xuất nào</h4>
+            <p style="font-size: 13.5px;">Vui lòng thử lại với từ khóa hoặc điều kiện lọc khác.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% if session.get('user_role') == 'QuanLyXuong' %}
+<!-- Modal 1: Tiếp nhận tạo đơn sản xuất mới -->
+<div id="createOrderModal" class="modal" aria-hidden="true" role="dialog" aria-labelledby="modalCreateOrderTitle">
+    <div class="modal-content" style="max-width: 580px;">
+        <span class="close-btn" onclick="closeCreateOrderModal()">&times;</span>
+        <h3 id="modalCreateOrderTitle"><i class="fa-solid fa-plus-circle text-primary"></i> Tiếp Nhận Đơn Sản Xuất Mới (FR-05)</h3>
+        <p class="text-muted" style="margin-bottom: 20px; font-size: 13px;">Khai báo đơn sản xuất, số lượng và thời hạn hoàn thành theo hợp đồng</p>
+        <form action="{{ url_for('workshop.orders') }}" method="POST" class="standard-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-row">
+                <div class="form-group col-6">
+                    <label for="product_id">Sản Phẩm Cần Sản Xuất *</label>
+                    <select id="product_id" name="product_id" required>
+                        {% for p in products %}
+                        <option value="{{ p.id }}">{{ p.id }} - {{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group col-6">
+                    <label for="quantity">Số Lượng Yêu Cầu *</label>
+                    <input type="number" id="quantity" name="quantity" min="1" required placeholder="Nhập số lượng > 0">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group col-6">
+                    <label for="due_date">Hạn Chót Bàn Giao *</label>
+                    <input type="date" id="due_date" name="due_date" required>
+                </div>
+                <div class="form-group col-6">
+                    <label for="note">Ghi Chú Đơn Hàng / Khách Hàng</label>
+                    <input type="text" id="note" name="note" placeholder="Thông tin hợp đồng hoặc yêu cầu">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeCreateOrderModal()">Hủy bỏ</button>
+                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-plus-circle"></i> Tiếp Nhận Đơn Sản Xuất</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal 2: Chỉnh sửa đơn sản xuất -->
+<div id="editOrderModal" class="modal" aria-hidden="true" role="dialog" aria-labelledby="modalOrderTitle">
+    <div class="modal-content" style="max-width: 580px;">
+        <span class="close-btn" onclick="closeEditOrderModal()">&times;</span>
+        <h3 id="modalOrderTitle"><i class="fa-solid fa-pen-to-square text-primary"></i> Chỉnh Sửa Đơn Sản Xuất</h3>
+        <p class="text-muted" style="margin-bottom: 20px; font-size: 13px;">Cập nhật thông tin đơn hàng, số lượng và thời hạn bàn giao</p>
+        <form id="editOrderForm" method="POST" class="standard-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group">
+                <label for="edit-order-id-display">Mã Đơn Sản Xuất</label>
+                <input id="edit-order-id-display" type="text" readonly class="form-control" style="background-color: var(--bg-surface, #f8fafc); font-family: monospace; font-weight: bold;">
+            </div>
+            <div class="form-row">
+                <div class="form-group col-6">
+                    <label for="edit-order-product">Sản Phẩm Cần Sản Xuất *</label>
+                    <select id="edit-order-product" name="product_id" required>
+                        {% for p in products %}
+                        <option value="{{ p.id }}">{{ p.id }} - {{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group col-6">
+                    <label for="edit-order-status">Trạng Thái Đơn</label>
+                    <select id="edit-order-status" name="status">
+                        {% for st in order_statuses %}
+                        <option value="{{ st }}">{{ st }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group col-6">
+                    <label for="edit-order-qty">Số Lượng Yêu Cầu *</label>
+                    <input id="edit-order-qty" name="quantity" type="number" min="1" required>
+                </div>
+                <div class="form-group col-6">
+                    <label for="edit-order-due">Hạn Chót Bàn Giao *</label>
+                    <input id="edit-order-due" name="due_date" type="date" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="edit-order-note">Ghi Chú Đơn Hàng</label>
+                <input id="edit-order-note" name="note" type="text" placeholder="Thông tin hợp đồng hoặc yêu cầu đặc biệt">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeEditOrderModal()">Hủy bỏ</button>
+                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Lưu Thay Đổi</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Tab filter switching between All, Incomplete, In-Progress, Completed, and Canceled
+function switchOrdersTab(tab) {
+    document.querySelectorAll('.orders-tab-btn').forEach(b => b.classList.remove('active'));
+    const activeBtn = document.getElementById('tab-btn-' + tab);
+    if (activeBtn) activeBtn.classList.add('active');
+
+    const secIncomplete = document.getElementById('orders-section-incomplete');
+    const secCompleted = document.getElementById('orders-section-completed');
+    const secCanceled = document.getElementById('orders-section-canceled');
+
+    if (tab === 'all') {
+        if (secIncomplete) {
+            secIncomplete.style.display = 'block';
+            secIncomplete.querySelectorAll('.order-card').forEach(c => c.style.display = 'block');
+        }
+        if (secCompleted) secCompleted.style.display = 'block';
+        if (secCanceled) secCanceled.style.display = 'block';
+    } else if (tab === 'incomplete') {
+        if (secIncomplete) {
+            secIncomplete.style.display = 'block';
+            secIncomplete.querySelectorAll('.order-card').forEach(c => c.style.display = 'block');
+        }
+        if (secCompleted) secCompleted.style.display = 'none';
+        if (secCanceled) secCanceled.style.display = 'none';
+    } else if (tab === 'inprogress') {
+        if (secIncomplete) {
+            secIncomplete.style.display = 'block';
+            secIncomplete.querySelectorAll('.order-card').forEach(c => {
+                c.style.display = (c.dataset.orderStatus === 'Đang thực hiện') ? 'block' : 'none';
+            });
+        }
+        if (secCompleted) secCompleted.style.display = 'none';
+        if (secCanceled) secCanceled.style.display = 'none';
+    } else if (tab === 'completed') {
+        if (secIncomplete) secIncomplete.style.display = 'none';
+        if (secCompleted) secCompleted.style.display = 'block';
+        if (secCanceled) secCanceled.style.display = 'none';
+    } else if (tab === 'canceled') {
+        if (secIncomplete) secIncomplete.style.display = 'none';
+        if (secCompleted) secCompleted.style.display = 'none';
+        if (secCanceled) secCanceled.style.display = 'block';
+    }
+}
+
+// Toggle collapse/expand of completed orders
+function toggleCompletedSection() {
+    const list = document.getElementById('completed-orders-list');
+    const icon = document.getElementById('toggleCompletedIcon');
+    const text = document.getElementById('toggleCompletedText');
+    if (!list) return;
+
+    if (list.style.display === 'none') {
+        list.style.display = 'block';
+        if (icon) icon.className = 'fa-solid fa-chevron-up';
+        if (text) text.innerText = 'Thu gọn';
+    } else {
+        list.style.display = 'none';
+        if (icon) icon.className = 'fa-solid fa-chevron-down';
+        if (text) text.innerText = 'Mở rộng';
+    }
+}
+
+{% if session.get('user_role') == 'QuanLyXuong' %}
+function openCreateOrderModal() {
+    document.getElementById('createOrderModal').style.display = 'block';
+}
+function closeCreateOrderModal() {
+    document.getElementById('createOrderModal').style.display = 'none';
+}
+function openEditOrderModal(btn) {
+    const orderId = btn.dataset.id;
+    const form = document.getElementById('editOrderForm');
+    form.action = `/orders/${encodeURIComponent(orderId)}/edit`;
+    document.getElementById('edit-order-id-display').value = '#' + orderId;
+    document.getElementById('edit-order-product').value = btn.dataset.productId || '';
+    document.getElementById('edit-order-qty').value = btn.dataset.quantity || 1;
+    document.getElementById('edit-order-due').value = btn.dataset.dueDate || '';
+    document.getElementById('edit-order-status').value = btn.dataset.status || 'Mới tạo';
+    document.getElementById('edit-order-note').value = btn.dataset.note || '';
+    document.getElementById('editOrderModal').style.display = 'block';
+}
+function closeEditOrderModal() {
+    document.getElementById('editOrderModal').style.display = 'none';
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.edit-order-btn').forEach(btn => {
+        btn.addEventListener('click', function () {
+            openEditOrderModal(this);
+        });
+    });
+    document.querySelectorAll('.order-delete-form').forEach(form => {
+        form.addEventListener('submit', function (event) {
+            const btn = form.querySelector('button[data-order-id]');
+            const orderId = btn ? btn.getAttribute('data-order-id') : '';
+            const msg = orderId
+                ? `Bạn có chắc chắn muốn xóa đơn sản xuất #${orderId} không? Kế hoạch và phân công đi kèm cũng sẽ bị xóa.`
+                : 'Bạn có chắc chắn muốn xóa đơn sản xuất này không?';
+            if (!confirm(msg)) {
+                event.preventDefault();
+            }
+        });
+    });
+    window.addEventListener('click', function (event) {
+        ['createOrderModal', 'editOrderModal'].forEach(modalId => {
+            const modal = document.getElementById(modalId);
+            if (modal && event.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+    });
+});
+{% endif %}
+</script>
+{% endblock %}

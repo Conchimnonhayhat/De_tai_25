@@ -1,0 +1,65 @@
+@startuml
+skinparam activityFontSize 12
+skinparam activityDiamondFontSize 11
+skinparam shadowing false
+
+title Sơ Đồ Hoạt Động (Activity Diagram) - Quy Trình Quản Lý Xưởng Sản Xuất
+
+start
+
+:Quản lý xưởng khai báo Sản phẩm;\n(FR-03: TenSanPham, DonViTinh);
+
+:Thiết lập Định mức nguyên liệu BOM;\n(FR-04: DinhMucNguyenLieu cho 1 đơn vị SP);
+
+:Tạo Đơn sản xuất & Lập kế hoạch;\n(FR-05, FR-06: SoLuongYeuCau, HanGiao);
+
+:Khai báo danh sách Công đoạn;\n(FR-07: ThuTu, TenCongDoan);
+
+:Phân công Nhân sự phụ trách công đoạn;\n(FR-08: PhanCong cho Tổ trưởng/Nhân viên);
+
+partition "Vòng đời Thực hiện Công đoạn (BR-02)" {
+    :Trạng thái công đoạn: **Chưa thực hiện**;
+    
+    :Bắt đầu ca sản xuất;\nTrạng thái chuyển sang: **Đang thực hiện**;
+    
+    :Ghi nhận xuất sử dụng nguyên vật liệu;\n(FR-11: SuDungNguyenLieu);
+    
+    if (Vật tư trong kho có đủ không?) then (Đủ)
+        :Tiếp tục sản xuất;
+    else (Thiếu vật tư)
+        #pink:Cảnh báo thiếu vật tư tồn kho;\n(Báo cáo Quản lý xưởng);
+    endif
+    
+    :Nhân viên cập nhật số lượng hoàn thành;\n(FR-09: TienDoCongDoan);
+    
+    if (Có phát sinh lỗi / hỏng không?) then (Có)
+        :Ghi nhận lỗi sản xuất và số lượng hỏng;\n(FR-10: LoiSanXuat);
+    else (Không)
+    endif
+    
+    if (Số lượng hoàn thành đạt yêu cầu của đơn?) then (Đạt 100%)
+        :Trạng thái chuyển sang: **Hoàn thành**;
+    else (Chưa đạt)
+        :Tiếp tục cập nhật sản lượng trong ca tiếp theo;
+    endif
+}
+
+partition "Tổng hợp Báo cáo & Trợ lý AI" {
+    :Tính toán thống kê Tiến độ, Năng suất và Tỷ lệ lỗi (BR-06);\n(FR-12, FR-13, FR-14);
+    
+    if (Người dùng kích hoạt Trợ lý AI?) then (Có)
+        :Hệ thống trích xuất Snapshot CSDL;\n(Đơn, Công đoạn, Lỗi, Vật tư);
+        if (Dữ liệu đầy đủ và nhất quán?) then (Nhất quán)
+            :Gemini tóm tắt tiến độ / phân tích lỗi / gợi ý ưu tiên;\n(FR-15, FR-16, FR-17);
+            :Quản lý xưởng xem xét và ra quyết định;
+        else (Dữ liệu thiếu / mâu thuẫn)
+            #pink:AI cảnh báo 'missing_data' / 'data_issues';\nYêu cầu con người kiểm tra thực tế;
+        endif
+    else (Không)
+    endif
+}
+
+:Hoàn tất đơn sản xuất;\nTrạng thái đơn: **Hoàn thành**;
+
+stop
+@enduml

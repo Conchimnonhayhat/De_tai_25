@@ -1,0 +1,589 @@
+{% extends "base.html" %}
+
+{% block page_title %}Điều Hành Sản Xuất & Cập Nhật Tiến Độ{% endblock %}
+{% block page_subtitle %}Quản lý quy trình từng công đoạn, ghi nhận sản lượng đạt và kiểm soát chất lượng{% endblock %}
+
+{% block content %}
+<div class="production-container">
+    <!-- Order Selector & Hero Banner -->
+    <div class="card" style="margin-bottom: 20px; border-left: 4px solid var(--primary);">
+        <div class="card-body" style="padding: 18px 24px;">
+            <form action="{{ url_for('workshop.production') }}" method="GET" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 280px;">
+                    <label for="order_select" style="font-weight: 700; color: #1e293b; font-size: 13.5px; white-space: nowrap; margin: 0;">
+                        <i class="fa-solid fa-filter text-primary"></i> Chọn đơn sản xuất:
+                    </label>
+                    <select id="order_select" name="order_id" onchange="this.form.submit()" style="flex: 1; min-height: 40px; border: 1px solid var(--border-color); border-radius: 8px; padding: 8px 12px; font-weight: 600; color: #0f172a;">
+                        {% for o in all_orders %}
+                        <option value="{{ o.id }}" {% if order and order.id == o.id %}selected{% endif %}>
+                            Đơn #{{ o.id }} - {{ o.product_name }} (SL: {{ o.quantity_requested }}, Hạn: {{ o.due_date }}) - {{ o.status }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <noscript>
+                    <button type="submit" class="btn btn-primary btn-sm">Xem đơn này</button>
+                </noscript>
+                {% if order %}
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="badge" style="background:#f1f5f9; color:#475569; font-weight:500;">
+                        <i class="fa-solid fa-calendar-days text-primary"></i> Hạn: {{ order.due_date }}
+                    </span>
+                    <span class="badge {% if order.status == 'Hoàn thành' %}badge-success{% else %}badge-warning{% endif %}">
+                        {{ order.status }}
+                    </span>
+                </div>
+                {% endif %}
+            </form>
+        </div>
+    </div>
+
+    {% if order %}
+    <!-- Order Summary Banner -->
+    <div class="order-banner">
+        <div>
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+                <span class="badge badge-primary" style="background: rgba(59, 130, 246, 0.2); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.4);">Đơn #{{ order.id }}</span>
+                <h2 style="margin: 0; font-size: 20px;">{{ order.product_name }}</h2>
+            </div>
+            <p style="margin: 0; color: #cbd5e1; font-size: 13px;">
+                Mã SP: <strong style="color: #ffffff;">{{ order.product_id }}</strong> |
+                Số lượng đặt: <strong style="color: #ffffff;">{{ order.quantity_requested }}</strong> sản phẩm |
+                Hạn bàn giao: <strong style="color: #ffffff;">{{ order.due_date }}</strong>
+            </p>
+        </div>
+        <div style="text-align: right;">
+            <a href="{{ url_for('workshop.orders') }}" class="btn btn-sm btn-outline" style="background: rgba(255,255,255,0.1); color: #fff; border-color: rgba(255,255,255,0.2);">
+                <i class="fa-solid fa-arrow-left"></i> Quay lại DS Đơn
+            </a>
+        </div>
+    </div>
+
+    <!-- Operations & Progress Table -->
+    <div class="card">
+        <div class="card-header">
+            <h3><i class="fa-solid fa-list-ol text-primary"></i> Tiến Độ Các Công Đoạn Sản Xuất (FR-09 / BR-02 / BR-03)</h3>
+            <span class="text-muted" style="font-size: 12.5px;">Tiến độ phải tuân thủ thứ tự tuần tự công đoạn</span>
+        </div>
+        <div class="card-body">
+            {% if not operations %}
+            <div style="padding: 30px 20px; text-align: center; color: #64748b;">
+                <i class="fa-solid fa-gears" style="font-size: 32px; color: #cbd5e1; margin-bottom: 10px; display: block;"></i>
+                <p>Sản phẩm {{ order.product_id }} chưa có công đoạn sản xuất.</p>
+                {% if session.get('user_role') == 'QuanLyXuong' %}
+                <a href="{{ url_for('workshop.products', q=order.product_id) }}" class="btn btn-primary btn-sm" style="margin-top: 8px;">
+                    <i class="fa-solid fa-plus-circle"></i> Khai báo công đoạn trong Sản Phẩm & Vật Tư
+                </a>
+                {% endif %}
+            </div>
+            {% elif not progress_list %}
+            <p class="text-muted">Sản phẩm đã có công đoạn nhưng đơn này chưa có bản ghi tiến độ. Vui lòng báo Quản lý xưởng kiểm tra dữ liệu của đơn.</p>
+            {% endif %}
+
+            {% if progress_list %}
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 10%;">Bước</th>
+                            <th style="width: 22%;">Tên Công Đoạn</th>
+                            <th style="width: 22%;">Quy Cách Thực Hiện</th>
+                            <th style="width: 14%;">Sản Lượng Đạt</th>
+                            <th style="width: 14%;">Tỷ Lệ</th>
+                            <th style="width: 10%;">Trạng Thái</th>
+                            <th style="width: 8%; text-align: right;">Thao Tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in progress_list %}
+                        <tr>
+                            <td>
+                                <span class="badge" style="background: #eff6ff; color: #2563eb; font-weight: 700; border: 1px solid #bfdbfe;">
+                                    Bước {{ p.step_order }}
+                                </span>
+                            </td>
+                            <td><strong style="color: #0f172a;">{{ p.operation_name }}</strong></td>
+                            <td><small class="text-muted">Công đoạn thứ tự #{{ p.step_order }} thuộc {{ order.product_id }}</small></td>
+                            <td>
+                                <strong style="font-size: 14px; color: #0f172a;">{{ p.completed_qty }}</strong>
+                                <span class="text-muted">/ {{ order.quantity_requested }}</span>
+                            </td>
+                            <td>
+                                {% set pct = (p.completed_qty / order.quantity_requested * 100)|round(1) %}
+                                <div class="progress-bar-container" style="width: 100px;">
+                                    <div class="progress-bar-fill" style="width: {{ pct }}%;"></div>
+                                </div>
+                                <span class="progress-text">{{ pct }}%</span>
+                            </td>
+                            <td>
+                                <span class="badge {% if p.status == 'Hoàn thành' %}badge-success{% elif p.status == 'Đang thực hiện' %}badge-warning{% else %}badge-light{% endif %}">
+                                    {{ p.status }}
+                                </span>
+                            </td>
+                            <td style="text-align: right;">
+                                {% if p.operation_id in editable_operation_ids %}
+                                <button type="button" class="btn btn-sm btn-primary progress-open"
+                                        data-operation-id="{{ p.operation_id }}" data-operation-name="{{ p.operation_name }}"
+                                        data-completed="{{ p.completed_qty }}" title="Cập nhật thêm sản lượng hoàn thành">
+                                    <i class="fa-solid fa-plus"></i> Cập Nhật
+                                </button>
+                                {% else %}
+                                <span class="text-muted" title="Không có quyền cập nhật bước này">—</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Operational Action Hub (Segmented Tabs) -->
+    <div class="card" style="margin-top: 24px;">
+        <div class="card-header" style="border-bottom: none; padding-bottom: 0;">
+            <div class="segmented-tabs" role="tablist">
+                {% if editable_operation_ids %}
+                <button type="button" class="segmented-tab-btn active" id="tab-btn-defect" onclick="switchOpTab('defect')">
+                    <i class="fa-solid fa-triangle-exclamation text-danger"></i> Ghi Nhận Lỗi (FR-10)
+                </button>
+                {% endif %}
+
+                {% if session.get('user_role') == 'QuanLyXuong' %}
+                <button type="button" class="segmented-tab-btn {% if not editable_operation_ids %}active{% endif %}" id="tab-btn-material" onclick="switchOpTab('material')">
+                    <i class="fa-solid fa-boxes-packing text-warning"></i> Xuất Vật Tư Thực Tế (FR-11)
+                </button>
+                {% endif %}
+
+                {% if session.get('user_role') in ('ToTruong', 'NhanVien') and editable_operation_ids and bom_options %}
+                <button type="button" class="segmented-tab-btn" id="tab-btn-worker-mat" onclick="switchOpTab('worker-mat')">
+                    <i class="fa-solid fa-clipboard-check text-primary"></i> Báo vật tư đã dùng
+                </button>
+                {% endif %}
+
+                {% if session.get('user_role') in ('QuanLyXuong', 'ToTruong') %}
+                <button type="button" class="segmented-tab-btn" id="tab-btn-assignment" onclick="switchOpTab('assignment')">
+                    <i class="fa-solid fa-user-plus text-purple"></i> Phân Công Nhân Sự
+                    {% if assignments %}<span class="badge" style="background:#e0e7ff; color:#4338ca; padding:2px 7px; font-size:11px;">{{ assignments|length }}</span>{% endif %}
+                </button>
+                {% endif %}
+
+                {% if material_reports %}
+                <button type="button" class="segmented-tab-btn" id="tab-btn-reports" onclick="switchOpTab('reports')">
+                    <i class="fa-solid fa-receipt text-success"></i> Phiếu Báo Vật Tư
+                    <span class="badge" style="background:#d1fae5; color:#065f46; padding:2px 7px; font-size:11px;">{{ material_reports|length }}</span>
+                </button>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card-body" style="padding-top: 10px;">
+            {% if editable_operation_ids %}
+            <!-- Tab Pane 1: Defect Logging -->
+            <div id="tab-pane-defect" class="op-tab-pane">
+                <div class="grid-2-col">
+                    <div>
+                        <h4 style="margin-bottom: 12px; font-size: 15px; color: #991b1b;">
+                            <i class="fa-solid fa-bug text-danger"></i> Khai Báo Lỗi Phát Sinh
+                        </h4>
+                        <form action="{{ url_for('workshop.production') }}" method="POST" class="standard-form">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="record_defect">
+                            <input type="hidden" name="order_id" value="{{ order.id }}">
+
+                            <div class="form-group">
+                                <label for="def_operation_id">Công Đoạn Phát Sinh Lỗi *</label>
+                                <select id="def_operation_id" name="operation_id" required>
+                                    {% for op in operations if op.id in editable_operation_ids %}
+                                    <option value="{{ op.id }}">Bước {{ op.step_order }}: {{ op.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="defect_desc">Mô Tả Hiện Tượng Lỗi *</label>
+                                <input type="text" id="defect_desc" name="defect_desc" required placeholder="Ví dụ: Vết nứt hàn, ba via lớn, sai lệch kích thước...">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="defect_qty">Số Lượng Sản Phẩm Hỏng *</label>
+                                <input type="number" id="defect_qty" name="defect_qty" min="1" value="1" required>
+                            </div>
+
+                            <button type="submit" class="btn btn-danger">
+                                <i class="fa-solid fa-triangle-exclamation"></i> Báo Cáo Lỗi Sản Xuất
+                            </button>
+                        </form>
+                    </div>
+
+                    <div style="background: #fafbfc; border: 1px solid #f1f5f9; border-radius: 12px; padding: 18px;">
+                        <h5 style="margin-bottom: 12px; font-size: 13.5px; color: #334155;">
+                            <i class="fa-solid fa-clock-rotate-left"></i> Lịch sử lỗi ghi nhận của đơn này:
+                        </h5>
+                        {% if defects %}
+                        <ul class="simple-list">
+                            {% for d in defects %}
+                            <li>
+                                <span class="badge badge-danger">{{ d.defect_qty }} hỏng</span>
+                                <div>
+                                    <strong>{{ d.operation_name }}:</strong> {{ d.defect_desc }}
+                                    <small class="text-muted" style="display:block;">{{ d.recorded_at }}</small>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p class="text-muted italic" style="font-size: 13px;">Chưa phát hiện lỗi nào cho đơn hàng này.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if session.get('user_role') == 'QuanLyXuong' %}
+            <!-- Tab Pane 2: Material Consumption (Manager) -->
+            <div id="tab-pane-material" class="op-tab-pane" style="{% if editable_operation_ids %}display: none;{% endif %}">
+                <div class="grid-2-col">
+                    <div>
+                        <h4 style="margin-bottom: 12px; font-size: 15px; color: #92400e;">
+                            <i class="fa-solid fa-dolly text-warning"></i> Xuất Vật Tư Trực Tiếp Vào Công Đoạn
+                        </h4>
+                        {% if operations %}
+                        <form action="{{ url_for('workshop.production') }}" method="POST" class="standard-form">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="record_material">
+                            <input type="hidden" name="order_id" value="{{ order.id }}">
+
+                            <div class="form-group">
+                                <label for="mat_operation_id">Công Đoạn Sử Dụng *</label>
+                                <select id="mat_operation_id" name="operation_id" required>
+                                    {% for op in operations %}
+                                    <option value="{{ op.id }}">Bước {{ op.step_order }}: {{ op.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="material_id">Nguyên Vật Liệu Trong Kho *</label>
+                                <select id="material_id" name="material_id" required>
+                                    {% for m in all_materials %}
+                                    <option value="{{ m.id }}">{{ m.name }} (Tồn kho: {{ m.stock }} {{ m.unit }})</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="quantity_used">Số Lượng Xuất Dùng *</label>
+                                <input type="number" step="0.01" id="quantity_used" name="quantity_used" min="0.01" required placeholder="Nhập lượng xuất">
+                            </div>
+
+                            <button type="submit" class="btn btn-warning">
+                                <i class="fa-solid fa-dolly"></i> Ghi Nhận & Trừ Tồn Kho
+                            </button>
+                        </form>
+                        {% else %}
+                        <p class="text-muted">Chưa thể ghi xuất vật tư vì sản phẩm của đơn chưa có công đoạn.</p>
+                        {% endif %}
+                    </div>
+
+                    <div style="background: #fafbfc; border: 1px solid #f1f5f9; border-radius: 12px; padding: 18px;">
+                        <h5 style="margin-bottom: 12px; font-size: 13.5px; color: #334155;">
+                            <i class="fa-solid fa-boxes-stacked"></i> Vật tư đã xuất dùng cho đơn:
+                        </h5>
+                        {% if materials_used %}
+                        <ul class="simple-list">
+                            {% for u in materials_used %}
+                            <li>
+                                <span class="badge badge-info">{{ u.quantity_used }} {{ u.unit }}</span>
+                                <div>
+                                    <strong>{{ u.material_name }}</strong> tại {{ u.operation_name }}
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p class="text-muted italic" style="font-size: 13px;">Chưa ghi nhận xuất vật tư nào.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if session.get('user_role') in ('ToTruong', 'NhanVien') and editable_operation_ids and bom_options %}
+            <!-- Tab Pane 3: Report Material (Worker/Leader) -->
+            <div id="tab-pane-worker-mat" class="op-tab-pane" style="display: none;">
+                <h4 style="margin-bottom: 8px; font-size: 15px; color: #1e40af;">
+                    <i class="fa-solid fa-clipboard-check text-primary"></i> Báo Vật Tư Đã Dùng Theo Công Việc Được Giao
+                </h4>
+                <p class="text-muted" style="font-size: 13px; margin-bottom: 16px;">
+                    Phiếu này chờ Quản lý xưởng đối chiếu và duyệt; gửi phiếu chưa làm thay đổi tồn kho ngay.
+                </p>
+                <form action="{{ url_for('workshop.production') }}" method="POST" class="standard-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="report_material">
+                    <input type="hidden" name="order_id" value="{{ order.id }}">
+                    <div class="form-row">
+                        <div class="form-group col-4">
+                            <label>Công đoạn được giao *</label>
+                            <select name="operation_id" required>
+                                {% for op in operations if op.id in editable_operation_ids %}
+                                <option value="{{ op.id }}">{{ op.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group col-4">
+                            <label>Vật tư trong danh sách cần dùng *</label>
+                            <select name="material_id" required>
+                                {% for item in bom_options %}
+                                <option value="{{ item.material_id }}">{{ item.material_name }} ({{ item.unit }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group col-4">
+                            <label>Số lượng đã dùng *</label>
+                            <input type="number" name="quantity_used" min="0.0001" step="0.0001" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fa-solid fa-paper-plane"></i> Gửi Phiếu Báo Vật Tư
+                    </button>
+                </form>
+            </div>
+            {% endif %}
+
+            {% if session.get('user_role') in ('QuanLyXuong', 'ToTruong') %}
+            <!-- Tab Pane 4: Personnel Assignment -->
+            <div id="tab-pane-assignment" class="op-tab-pane" style="display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+                    <h4 style="margin: 0; font-size: 15px; color: #6d28d9;">
+                        <i class="fa-solid fa-users-gear text-purple"></i> Phân Công Nhân Sự Cho Đơn Hàng Này
+                    </h4>
+                </div>
+
+                <!-- Current assignments table -->
+                {% if assignments %}
+                <div class="table-responsive" style="margin-bottom: 22px;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Nhân Viên Được Phân Công</th>
+                                <th>Công Đoạn Phụ Trách</th>
+                                <th>Ngày Phân Công</th>
+                                <th style="text-align: right;">Thao Tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for a in assignments %}
+                            <tr>
+                                <td>
+                                    <div class="account-cell">
+                                        <div class="account-avatar" style="width:32px;height:32px;flex:0 0 32px;font-size:12px;">{{ a.user_name[:1]|upper }}</div>
+                                        <div>
+                                            <strong>{{ a.user_name }}</strong>
+                                            <small style="display:block;color:#64748b;">ID #{{ a.user_id }}</small>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td><span class="badge badge-info">{{ a.operation_name }}</span></td>
+                                <td>{{ a.date }}</td>
+                                <td style="text-align: right;">
+                                    {% if a.id in removable_assignment_ids %}
+                                    <form action="{{ url_for('workshop.unassign_worker', assignment_id=a.id) }}" method="POST"
+                                          data-confirm="Gỡ phân công {{ a.user_name }} khỏi công đoạn {{ a.operation_name }}?"
+                                          style="display:inline;">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="order_id" value="{{ order.id }}">
+                                        <button type="submit" class="btn btn-sm btn-soft-danger" title="Gỡ phân công">
+                                            <i class="fa-solid fa-user-minus"></i> Gỡ
+                                        </button>
+                                    </form>
+                                    {% else %}—{% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="assignment-empty-msg">
+                    <i class="fa-solid fa-info-circle text-primary"></i>
+                    Chưa có nhân sự nào được phân công cho đơn hàng này. Bạn hãy thêm phân công bên dưới.
+                </div>
+                {% endif %}
+
+                <!-- Form to add new assignment -->
+                <div class="assignment-form-section">
+                    <h5 style="margin-bottom: 12px; font-size: 13.5px; color: #4c1d95;">
+                        <i class="fa-solid fa-plus-circle"></i> Thêm Phân Công Mới
+                    </h5>
+                    {% if session.get('user_role') == 'ToTruong' and not assignable_workers %}
+                    <p class="text-muted" style="font-size: 13px;">Tổ chưa có nhân viên đang hoạt động. Quản trị viên cần gắn nhân viên vào tổ trong Quản lý tài khoản.</p>
+                    {% endif %}
+                    <form action="{{ url_for('workshop.assign_worker') }}" method="POST" class="assignment-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="order_id" value="{{ order.id }}">
+
+                        <div class="form-group">
+                            <label for="assign_user_id">{% if session.get('user_role') == 'QuanLyXuong' %}Tổ trưởng phụ trách *{% else %}Nhân viên (có thể chọn nhiều) *{% endif %}</label>
+                            <div id="assignment-user-rows">
+                                <div class="assignment-user-row">
+                                    <select id="assign_user_id" name="user_ids[]" aria-label="Người được phân công" required>
+                                        <option value="">-- Chọn {% if session.get('user_role') == 'QuanLyXuong' %}tổ trưởng{% else %}nhân viên{% endif %} --</option>
+                                        {% for w in assignable_workers %}
+                                        <option value="{{ w.id }}">{{ w.name }} ({{ {'ToTruong': 'Tổ trưởng', 'NhanVien': 'Nhân viên'}[w.role] }}) — ID #{{ w.id }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="button" class="btn btn-sm btn-danger" data-remove-assignee aria-label="Bỏ nhân viên này" title="Bỏ nhân viên này">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            {% if session.get('user_role') == 'ToTruong' %}
+                            <button type="button" id="add-assignment-user" class="btn btn-sm btn-outline">
+                                <i class="fa-solid fa-plus"></i> Thêm nhân viên
+                            </button>
+                            <small class="assignment-help">Các nhân viên được chọn sẽ cùng làm công đoạn và nhận cùng ngày phân công.</small>
+                            {% else %}
+                            <small class="assignment-help">Giao công đoạn cho một Tổ trưởng; người này sẽ phân việc cho nhân viên trong tổ.</small>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label for="assign_operation_id">Công đoạn *</label>
+                            <select id="assign_operation_id" name="operation_id" required>
+                                <option value="">-- Chọn công đoạn --</option>
+                                {% for op in operations %}
+                                <option value="{{ op.id }}">Bước {{ op.step_order }}: {{ op.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="assign_date">Ngày phân công</label>
+                            <input type="date" id="assign_date" name="assign_date" value="{{ today if today is defined else '' }}">
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fa-solid fa-user-plus"></i> {% if session.get('user_role') == 'QuanLyXuong' %}Giao cho tổ trưởng{% else %}Phân công nhân viên{% endif %}
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if material_reports %}
+            <!-- Tab Pane 5: Material Reports Review -->
+            <div id="tab-pane-reports" class="op-tab-pane" style="display: none;">
+                <h4 style="margin-bottom: 12px; font-size: 15px; color: #065f46;">
+                    <i class="fa-solid fa-receipt text-success"></i> Danh Sách Phiếu Báo Vật Tư Của Đơn
+                </h4>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Mã Phiếu</th>
+                                <th>Người Báo</th>
+                                <th>Vật Tư</th>
+                                <th>Số Lượng Báo</th>
+                                <th>Trạng Thái</th>
+                                <th style="text-align: right;">Thao Tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for report in material_reports %}
+                            <tr>
+                                <td><code>{{ report.MaBaoVatTu }}</code></td>
+                                <td><strong>{{ report.NguoiBao }}</strong></td>
+                                <td>{{ report.TenNguyenLieu }}</td>
+                                <td><span class="badge badge-light" style="background:#f1f5f9; color:#0f172a;">{{ report.SoLuongBaoCao }} {{ report.DonViTinh }}</span></td>
+                                <td>
+                                    <span class="badge {% if report.TrangThai == 'Pending' %}badge-warning{% else %}badge-success{% endif %}">
+                                        {{ 'Chờ duyệt' if report.TrangThai == 'Pending' else 'Đã duyệt' }}
+                                    </span>
+                                </td>
+                                <td style="text-align: right;">
+                                    {% if session.get('user_role') == 'QuanLyXuong' and report.TrangThai == 'Pending' %}
+                                    <form action="{{ url_for('workshop.approve_material_report', report_id=report.MaBaoVatTu) }}" method="POST" style="display: inline;">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-primary btn-sm">
+                                            <i class="fa-solid fa-check"></i> Duyệt và trừ kho
+                                        </button>
+                                    </form>
+                                    {% else %}—{% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal cập nhật nhanh tiến độ -->
+<div id="updateModal" class="modal" aria-hidden="true" role="dialog" aria-labelledby="modalProgressTitle">
+    <div class="modal-content" style="max-width: 480px;">
+        <span class="close-btn" onclick="closeUpdateModal()">&times;</span>
+        <h3 id="modalProgressTitle"><i class="fa-solid fa-plus-circle text-primary"></i> Cập Nhật Sản Lượng Hoàn Thành</h3>
+        <p id="modalOpTitle" class="text-muted" style="margin-bottom: 20px; font-size: 13px;">Công đoạn</p>
+        <form action="{{ url_for('workshop.production') }}" method="POST" class="standard-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="update_progress">
+            <input type="hidden" name="order_id" value="{{ order.id }}">
+            <input type="hidden" id="modalOpId" name="operation_id">
+
+            <div class="form-group">
+                <label for="additional_qty">Số lượng hoàn thành bổ sung trong ca này (sản phẩm):</label>
+                <input type="number" id="additional_qty" name="additional_qty" min="1" value="10" required>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeUpdateModal()">Hủy bỏ</button>
+                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> Xác Nhận Cập Nhật</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function switchOpTab(tabName) {
+    document.querySelectorAll('.segmented-tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.op-tab-pane').forEach(pane => pane.style.display = 'none');
+
+    const activeBtn = document.getElementById('tab-btn-' + tabName);
+    const activePane = document.getElementById('tab-pane-' + tabName);
+    if (activeBtn) activeBtn.classList.add('active');
+    if (activePane) activePane.style.display = 'block';
+}
+
+function openUpdateModal(opId, opName, currentQty) {
+    document.getElementById('modalOpId').value = opId;
+    document.getElementById('modalOpTitle').innerText = opName + ' (Đang có: ' + currentQty + ' hoàn thành)';
+    document.getElementById('updateModal').style.display = 'block';
+}
+
+document.querySelectorAll('.progress-open').forEach(button => {
+    button.addEventListener('click', () => {
+        openUpdateModal(button.dataset.operationId, button.dataset.operationName, button.dataset.completed);
+    });
+});
+
+function closeUpdateModal() {
+    document.getElementById('updateModal').style.display = 'none';
+}
+
+window.onclick = function(event) {
+    const modal = document.getElementById('updateModal');
+    if (event.target == modal) {
+        modal.style.display = 'none';
+    }
+}
+
+</script>
+{% endblock %}

@@ -1,0 +1,76 @@
+@startuml
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+skinparam shadowing false
+skinparam monochrome false
+
+actor "Quản trị viên\n(Admin)" as Admin
+actor "Quản lý xưởng\n(Manager)" as Manager
+actor "Tổ trưởng\n(Team Leader)" as Leader
+actor "Nhân viên\n(Worker)" as Worker
+actor "Dịch vụ AI\n(External Gemini)" as AI <<System>>
+
+rectangle "Hệ Thống Quản Lý Xưởng Sản Xuất Nhỏ (AI-Augmented)" {
+    ' Nhóm 1: Hệ thống & Phân quyền
+    usecase "UC001: Đăng nhập / Đăng xuất" as UC001
+    usecase "UC002: Quản lý tài khoản\n& Phân quyền" as UC002
+
+    ' Nhóm 2: Sản phẩm & Định mức
+    usecase "UC003: Quản lý sản phẩm" as UC003
+    usecase "UC004: Quản lý định mức\nnguyên liệu (BOM)" as UC004
+
+    ' Nhóm 3: Đơn & Kế hoạch
+    usecase "UC005: Quản lý đơn sản xuất\n& Kế hoạch" as UC005
+    usecase "UC006: Quản lý công đoạn\n& Phân công nhân sự" as UC006
+
+    ' Nhóm 4: Ghi nhận thực tế
+    usecase "UC007: Cập nhật tiến độ\ncông đoạn" as UC007
+    usecase "UC008: Ghi nhận lỗi &\nSản phẩm hỏng" as UC008
+    usecase "UC009: Ghi nhận sử dụng\nnguyên vật liệu" as UC009
+
+    ' Nhóm 5: Thống kê
+    usecase "UC010: Thống kê tiến độ,\nNăng suất, Tỷ lệ lỗi" as UC010
+
+    ' Nhóm 6: Trợ lý AI
+    usecase "UC011: AI tóm tắt tiến độ đơn" as UC011
+    usecase "UC012: AI phân tích lỗi &\nGiả thuyết nguyên nhân" as UC012
+    usecase "UC013: AI gợi ý thứ tự\nưu tiên đơn" as UC013
+}
+
+' Phân quyền Admin
+Admin --> UC001
+Admin --> UC002
+
+' Phân quyền Manager
+Manager --> UC001
+Manager --> UC003
+Manager --> UC004
+Manager --> UC005
+Manager --> UC006
+Manager --> UC010
+Manager --> UC011
+Manager --> UC012
+Manager --> UC013
+
+' Phân quyền Leader
+Leader --> UC001
+Leader --> UC006
+Leader --> UC007
+Leader --> UC008
+Leader --> UC009
+Leader --> UC010
+Leader --> UC011
+Leader --> UC012
+
+' Phân quyền Worker
+Worker --> UC001
+Worker --> UC007
+Worker --> UC008
+Worker --> UC009
+
+' Tương tác Hệ thống AI bên ngoài (chỉ đóng vai trò xử lý hỗ trợ)
+AI <-- UC011 : <<provide inference>>
+AI <-- UC012 : <<provide inference>>
+AI <-- UC013 : <<provide inference>>
+
+@enduml

@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+
+{% block page_title %}Quản Lý Kho Nguyên Vật Liệu{% endblock %}
+{% block page_subtitle %}Theo dõi số lượng tồn kho nguyên vật liệu và phục vụ kế hoạch sản xuất{% endblock %}
+
+{% block header_actions %}
+{% if session.get('user_role') == 'QuanLyXuong' %}
+<button type="button" class="btn btn-primary" onclick="openCreateMaterialModal()">
+    <i class="fa-solid fa-plus-circle"></i> Thêm Vật Tư Mới
+</button>
+<button type="button" class="btn btn-success" onclick="openReceiveMaterialModal()">
+    <i class="fa-solid fa-dolly"></i> Nhập Kho Vật Tư
+</button>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<!-- Quick Summary Stats Bar -->
+<div class="summary-pills-row">
+    <div class="summary-pill">
+        <i class="fa-solid fa-boxes-stacked text-primary"></i>
+        <span>Tổng danh mục: <strong>{{ materials|length }}</strong> vật tư</span>
+    </div>
+    {% set low_stock_count = materials|selectattr('stock', 'lt', 50)|list|length %}
+    <div class="summary-pill">
+        <i class="fa-solid fa-triangle-exclamation text-warning"></i>
+        <span>Sắp hết (&lt;50): <strong class="{% if low_stock_count > 0 %}text-danger{% endif %}">{{ low_stock_count }}</strong></span>
+    </div>
+    <div class="summary-pill">
+        <i class="fa-solid fa-circle-check text-success"></i>
+        <span>Trạng thái kho: <strong>Ổn định</strong></span>
+    </div>
+</div>
+
+<!-- Main Inventory Card -->
+<div class="card">
+    <div class="card-header">
+        <h3><i class="fa-solid fa-warehouse"></i> Danh Mục Tồn Kho Nguyên Vật Liệu (URD NguyenLieu)</h3>
+        <div class="card-actions">
+            {% if session.get('user_role') == 'QuanLyXuong' %}
+            <button type="button" class="btn btn-sm btn-outline" onclick="openReceiveMaterialModal()">
+                <i class="fa-solid fa-arrow-down-to-bracket"></i> Nhập thêm
+            </button>
+            {% endif %}
+        </div>
+    </div>
+    <div class="card-body">
+        <!-- Search and Filter Form -->
+        <form method="GET" class="filter-form" aria-label="Tìm và lọc vật tư">
+            <input type="search" name="q" value="{{ q }}" placeholder="Tìm theo mã hoặc tên vật tư..." aria-label="Từ khóa vật tư">
+            <select name="stock" aria-label="Lọc mức tồn">
+                <option value="">Tất cả mức tồn kho</option>
+                <option value="available" {% if stock_filter == 'available' %}selected{% endif %}>Còn hàng</option>
+                <option value="low" {% if stock_filter == 'low' %}selected{% endif %}>Sắp hết (&lt; 50)</option>
+                <option value="empty" {% if stock_filter == 'empty' %}selected{% endif %}>Hết hàng (0)</option>
+            </select>
+            <button type="submit" class="btn btn-primary">
+                <i class="fa-solid fa-filter"></i> Lọc
+            </button>
+            <a href="{{ url_for('workshop.inventory') }}" class="btn btn-outline" title="Xóa bộ lọc">
+                <i class="fa-solid fa-rotate-left"></i> Xóa lọc
+            </a>
+        </form>
+
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th style="width: 14%;">Mã Vật Tư</th>
+                        <th style="width: 28%;">Tên Nguyên Vật Liệu</th>
+                        <th style="width: 16%;">Số Lượng Tồn Kho</th>
+                        <th style="width: 10%;">Đơn Vị</th>
+                        <th style="width: 12%;">Trạng Thái</th>
+                        <th style="width: 10%;">Cập Nhật</th>
+                        {% if session.get('user_role') == 'QuanLyXuong' %}
+                        <th style="width: 10%; text-align: right;">Thao Tác</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in materials %}
+                    <tr>
+                        <td><code style="font-weight: 700; color: #1e293b;">{{ m.id }}</code></td>
+                        <td>
+                            <strong style="color: #0f172a;">{{ m.name }}</strong>
+                        </td>
+                        <td>
+                            <span class="stock-badge {% if m.stock < 50 %}stock-low{% else %}stock-ok{% endif %}">
+                                <i class="fa-solid {% if m.stock < 50 %}fa-arrow-trend-down{% else %}fa-check{% endif %}"></i>
+                                {{ m.stock }}
+                            </span>
+                        </td>
+                        <td><span class="badge badge-light" style="background:#f1f5f9; color:#475569;">{{ m.unit }}</span></td>
+                        <td>
+                            <span class="badge {% if m.stock > 0 %}badge-success{% else %}badge-danger{% endif %}">
+                                {{ m.status }}
+                            </span>
+                        </td>
+                        <td><small class="text-muted">{{ m.updated_at }}</small></td>
+                        {% if session.get('user_role') == 'QuanLyXuong' %}
+                        <td style="text-align: right;">
+                            <div class="table-actions" style="justify-content: flex-end;">
+                                <button type="button" class="btn btn-sm btn-soft-primary edit-material-btn"
+                                    data-id="{{ m.id }}"
+                                    data-name="{{ m.name }}"
+                                    data-unit="{{ m.unit }}"
+                                    data-stock="{{ m.stock }}"
+                                    data-status="{{ m.status }}"
+                                    title="Chỉnh sửa thông tin vật tư">
+                                    <i class="fa-solid fa-pen-to-square"></i> Sửa
+                                </button>
+                                <form action="{{ url_for('workshop.delete_material', material_id=m.id) }}" method="POST" class="material-delete-form" style="margin: 0;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-sm btn-soft-danger" data-id="{{ m.id }}" aria-label="Xóa vật tư {{ m.id }}" title="Xóa vật tư khỏi kho">
+                                        <i class="fa-solid fa-trash-can"></i> Xóa
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% if not materials %}
+            <div style="padding: 40px 20px; text-align: center; color: #64748b;">
+                <i class="fa-solid fa-box-open" style="font-size: 36px; margin-bottom: 12px; color: #cbd5e1; display: block;"></i>
+                <p>Không tìm thấy vật tư nào phù hợp với bộ lọc hiện tại.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% if session.get('user_role') == 'QuanLyXuong' %}
+<!-- Modal 1: Khai báo thêm vật tư mới -->
+<div id="createMaterialModal" class="modal" aria-hidden="true" role="dialog" aria-labelledby="modalCreateMatTitle">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeCreateMaterialModal()">&times;</span>
+        <h3 id="modalCreateMatTitle"><i class="fa-solid fa-plus-circle text-primary"></i> Khai Báo Vật Tư Mới (FR-01)</h3>
+        <p class="text-muted" style="margin-bottom: 20px; font-size: 13px;">Nhập thông tin mã, tên và số lượng tồn ban đầu của vật tư</p>
+        <form method="POST" class="standard-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="create">
+            
+            <div class="form-group">
+                <label for="new-material-id">Mã Vật Tư *</label>
+                <input id="new-material-id" name="material_id" maxlength="50" required placeholder="Ví dụ: NL05, THEP_01">
+            </div>
+            <div class="form-group">
+                <label for="new-material-name">Tên Nguyên Vật Liệu *</label>
+                <input id="new-material-name" name="name" maxlength="150" required placeholder="Ví dụ: Thép ống phi 25, Ốc vít M6...">
+            </div>
+            <div class="form-row">
+                <div class="form-group col-6">
+                    <label for="new-material-unit">Đơn Vị Tính *</label>
+                    <input id="new-material-unit" name="unit" maxlength="20" required placeholder="kg, mét, cái, lít...">
+                </div>
+                <div class="form-group col-6">
+                    <label for="opening-stock">Số Lượng Tồn Ban Đầu *</label>
+                    <input id="opening-stock" name="opening_stock" type="number" step="0.01" min="0" value="0" required>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeCreateMaterialModal()">Hủy bỏ</button>
+                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Lưu Vật Tư</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal 2: Nhập thêm vật tư vào kho -->
+<div id="receiveMaterialModal" class="modal" aria-hidden="true" role="dialog" aria-labelledby="modalReceiveMatTitle">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeReceiveMaterialModal()">&times;</span>
+        <h3 id="modalReceiveMatTitle"><i class="fa-solid fa-dolly text-success"></i> Nhập Kho Nguyên Vật Liệu (FR-02)</h3>
+        <p class="text-muted" style="margin-bottom: 20px; font-size: 13px;">Ghi nhận số lượng bổ sung vào số lượng tồn kho hiện tại</p>
+        <form method="POST" class="standard-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="receive">
+            
+            <div class="form-group">
+                <label for="receive-material-id">Chọn Vật Tư Cần Nhập *</label>
+                <select id="receive-material-id" name="material_id" required>
+                    {% for material in all_materials %}
+                    <option value="{{ material.id }}">{{ material.id }} - {{ material.name }} (Hiện có: {{ material.stock }} {{ material.unit }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="receive-quantity">Số Lượng Bổ Sung *</label>
+                <input id="receive-quantity" name="quantity" type="number" step="0.01" min="0.01" required placeholder="Nhập số lượng > 0">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeReceiveMaterialModal()">Hủy bỏ</button>
+                <button type="submit" class="btn btn-success"><i class="fa-solid fa-check"></i> Xác Nhận Nhập Kho</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal 3: Chỉnh sửa thông tin vật tư -->
+<div id="editMaterialModal" class="modal" aria-hidden="true" role="dialog" aria-labelledby="modalMatTitle">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeEditMaterialModal()">&times;</span>
+        <h3 id="modalMatTitle"><i class="fa-solid fa-pen-to-square text-primary"></i> Chỉnh Sửa Nguyên Vật Liệu</h3>
+        <p class="text-muted" style="margin-bottom: 20px; font-size: 13px;">Cập nhật thông tin chi tiết và trạng thái của vật tư</p>
+        <form id="editMaterialForm" method="POST" class="standard-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group">
+                <label for="edit-mat-id">Mã Vật Tư</label>
+                <input id="edit-mat-id" type="text" readonly class="form-control" style="background-color: var(--bg-surface, #f8fafc); font-family: monospace; font-weight: bold;">
+            </div>
+            <div class="form-group">
+                <label for="edit-mat-name">Tên Vật Tư *</label>
+                <input id="edit-mat-name" name="name" maxlength="150" required>
+            </div>
+            <div class="form-row">
+                <div class="form-group col-6">
+                    <label for="edit-mat-unit">Đơn Vị Tính *</label>
+                    <input id="edit-mat-unit" name="unit" maxlength="20" required>
+                </div>
+                <div class="form-group col-6">
+                    <label for="edit-mat-stock">Số Lượng Tồn Kho *</label>
+                    <input id="edit-mat-stock" name="stock" type="number" step="0.01" min="0" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="edit-mat-status">Trạng Thái</label>
+                <select id="edit-mat-status" name="status">
+                    <option value="Active">Active (Đang sử dụng)</option>
+                    <option value="Inactive">Inactive (Tạm ngưng)</option>
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeEditMaterialModal()">Hủy bỏ</button>
+                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Lưu Thay Đổi</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if session.get('user_role') == 'QuanLyXuong' %}
+<script>
+function openCreateMaterialModal() {
+    document.getElementById('createMaterialModal').style.display = 'block';
+}
+function closeCreateMaterialModal() {
+    document.getElementById('createMaterialModal').style.display = 'none';
+}
+function openReceiveMaterialModal() {
+    document.getElementById('receiveMaterialModal').style.display = 'block';
+}
+function closeReceiveMaterialModal() {
+    document.getElementById('receiveMaterialModal').style.display = 'none';
+}
+function openEditMaterialModal(btn) {
+    const matId = btn.dataset.id;
+    const form = document.getElementById('editMaterialForm');
+    form.action = `/inventory/${encodeURIComponent(matId)}/edit`;
+    document.getElementById('edit-mat-id').value = matId;
+    document.getElementById('edit-mat-name').value = btn.dataset.name || '';
+    document.getElementById('edit-mat-unit').value = btn.dataset.unit || '';
+    document.getElementById('edit-mat-stock').value = btn.dataset.stock || 0;
+    document.getElementById('edit-mat-status').value = btn.dataset.status || 'Active';
+    document.getElementById('editMaterialModal').style.display = 'block';
+}
+function closeEditMaterialModal() {
+    document.getElementById('editMaterialModal').style.display = 'none';
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.edit-material-btn').forEach(btn => {
+        btn.addEventListener('click', function () {
+            openEditMaterialModal(this);
+        });
+    });
+    document.querySelectorAll('.material-delete-form').forEach(form => {
+        form.addEventListener('submit', function (event) {
+            const btn = form.querySelector('button[data-id]');
+            const matId = btn ? btn.getAttribute('data-id') : '';
+            if (!confirm(`Bạn có chắc chắn muốn xóa vật tư ${matId} khỏi kho không?`)) {
+                event.preventDefault();
+            }
+        });
+    });
+    window.addEventListener('click', function (event) {
+        ['createMaterialModal', 'receiveMaterialModal', 'editMaterialModal'].forEach(modalId => {
+            const modal = document.getElementById(modalId);
+            if (modal && event.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+    });
+});
+</script>
+{% endif %}
+{% endblock %}

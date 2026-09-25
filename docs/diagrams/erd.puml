@@ -1,0 +1,179 @@
+@startuml
+skinparam linetype ortho
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+entity "TaiKhoan" as TaiKhoan {
+    * MaTaiKhoan : VARCHAR(32) <<PK>>
+    --
+    HoTen : VARCHAR(100)
+    Email : VARCHAR(100) <<UNIQUE>>
+    MatKhau : VARCHAR(255)
+    VaiTro : VARCHAR(50)
+    TrangThai : VARCHAR(20)
+}
+
+entity "SanPham" as SanPham {
+    * MaSanPham : VARCHAR(32) <<PK>>
+    --
+    TenSanPham : VARCHAR(150)
+    DonViTinh : VARCHAR(20)
+    MoTa : TEXT
+    TrangThai : VARCHAR(20)
+    NgayTao : DATETIME
+}
+
+entity "NguyenLieu" as NguyenLieu {
+    * MaNguyenLieu : VARCHAR(32) <<PK>>
+    --
+    TenNguyenLieu : VARCHAR(150)
+    DonViTinh : VARCHAR(20)
+    SoLuongTon : DECIMAL(12,2)
+    TrangThai : VARCHAR(20)
+    NgayCapNhat : DATETIME
+}
+
+entity "DinhMucNguyenLieu" as DinhMucNguyenLieu {
+    * MaSanPham : VARCHAR(32) <<PK, FK>>
+    * MaNguyenLieu : VARCHAR(32) <<PK, FK>>
+    --
+    SoLuongDinhMuc : DECIMAL(18,4)
+    DonViTinh : VARCHAR(20)
+    GhiChu : VARCHAR(255)
+    NgayCapNhat : DATETIME
+}
+
+entity "DonSanXuat" as DonSanXuat {
+    * MaDon : VARCHAR(32) <<PK>>
+    --
+    MaSanPham : VARCHAR(32) <<FK>>
+    SoLuongYeuCau : INT
+    HanGiao : DATE
+    TrangThai : VARCHAR(30)
+    NgayTao : DATETIME
+    GhiChu : TEXT
+}
+
+entity "CongDoan" as CongDoan {
+    * MaCongDoan : VARCHAR(32) <<PK>>
+    --
+    MaSanPham : VARCHAR(32) <<FK>>
+    TenCongDoan : VARCHAR(100)
+    ThuTu : INT
+    MoTa : TEXT
+    TrangThai : VARCHAR(20)
+    NgayCapNhat : DATETIME
+}
+
+entity "KeHoachSanXuat" as KeHoachSanXuat {
+    * MaKeHoach : VARCHAR(32) <<PK>>
+    --
+    MaDon : VARCHAR(32) <<FK>>
+    NgayBatDau : DATE
+    NgayKetThuc : DATE
+}
+
+entity "PhanCong" as PhanCong {
+    * MaPhanCong : VARCHAR(32) <<PK>>
+    --
+    MaCongDoan : VARCHAR(32) <<FK>>
+    MaTaiKhoan : VARCHAR(32) <<FK>>
+    MaDon : VARCHAR(32) <<FK, DeXuat>>
+    NgayPhanCong : DATE
+}
+
+entity "TienDoCongDoan" as TienDoCongDoan {
+    * MaTienDo : VARCHAR(32) <<PK>>
+    --
+    MaCongDoan : VARCHAR(32) <<FK>>
+    MaDon : VARCHAR(32) <<FK, DeXuat>>
+    SoLuongHoanThanh : INT
+    TrangThai : VARCHAR(30)
+    NgayCapNhat : DATETIME
+}
+
+entity "SuDungNguyenLieu" as SuDungNguyenLieu {
+    * MaSuDung : VARCHAR(32) <<PK>>
+    --
+    MaDon : VARCHAR(32) <<FK>>
+    MaCongDoan : VARCHAR(32) <<FK>>
+    MaNguyenLieu : VARCHAR(32) <<FK>>
+    SoLuongSuDung : DECIMAL(12,2)
+    NgayGhiNhan : DATETIME
+}
+
+entity "LoiSanXuat" as LoiSanXuat {
+    * MaLoi : VARCHAR(32) <<PK>>
+    --
+    MaDon : VARCHAR(32) <<FK>>
+    MaCongDoan : VARCHAR(32) <<FK>>
+    MoTaLoi : TEXT
+    SoLuongHong : INT
+    NgayGhiNhan : DATETIME
+}
+
+entity "BaoCaoNgay" as BaoCaoNgay {
+    * MaBaoCao : VARCHAR(32) <<PK>>
+    --
+    MaDon : VARCHAR(32) <<FK>>
+    MaTaiKhoan : VARCHAR(32) <<FK>>
+    NgayBaoCao : DATE
+    SoLuongHoanThanh : INT
+    SoLuongHong : INT
+    GhiChu : TEXT
+    TrangThai : VARCHAR(20)
+    NgayTao : DATETIME
+    NgayDuyet : DATETIME
+    MaNguoiDuyet : VARCHAR(32) <<FK>>
+}
+
+entity "BaoVatTu" as BaoVatTu {
+    * MaBaoVatTu : VARCHAR(32) <<PK>>
+    --
+    MaDon : VARCHAR(32) <<FK>>
+    MaCongDoan : VARCHAR(32) <<FK>>
+    MaNguyenLieu : VARCHAR(32) <<FK>>
+    MaTaiKhoan : VARCHAR(32) <<FK>>
+    SoLuongBaoCao : DECIMAL(18,4)
+    TrangThai : VARCHAR(20)
+    NgayBaoCao : DATETIME
+    NgayDuyet : DATETIME
+    MaNguoiDuyet : VARCHAR(32) <<FK>>
+    MaSuDung : VARCHAR(32) <<FK>>
+}
+
+entity "ThanhVienTo" as ThanhVienTo {
+    * MaToTruong : VARCHAR(32) <<PK, FK>>
+    * MaNhanVien : VARCHAR(32) <<PK, FK>>
+}
+
+' Quan hệ giữa các bảng (Cardinalities)
+SanPham ||--o{ DinhMucNguyenLieu : "1 - N"
+NguyenLieu ||--o{ DinhMucNguyenLieu : "1 - N"
+
+SanPham ||--o{ DonSanXuat : "1 - N"
+SanPham ||--o{ CongDoan : "1 - N"
+
+DonSanXuat ||--o{ KeHoachSanXuat : "1 - N"
+DonSanXuat ||--o{ SuDungNguyenLieu : "1 - N"
+DonSanXuat ||--o{ LoiSanXuat : "1 - N"
+DonSanXuat ||--o{ TienDoCongDoan : "1 - N [Đề xuất]"
+
+CongDoan ||--o{ PhanCong : "1 - N"
+TaiKhoan ||--o{ PhanCong : "1 - N"
+
+CongDoan ||--o{ TienDoCongDoan : "1 - N"
+CongDoan ||--o{ SuDungNguyenLieu : "1 - N"
+CongDoan ||--o{ LoiSanXuat : "1 - N"
+NguyenLieu ||--o{ SuDungNguyenLieu : "1 - N"
+DonSanXuat ||--o{ BaoCaoNgay : "1 - N"
+TaiKhoan ||--o{ BaoCaoNgay : "1 - N"
+DonSanXuat ||--o{ BaoVatTu : "1 - N"
+CongDoan ||--o{ BaoVatTu : "1 - N"
+NguyenLieu ||--o{ BaoVatTu : "1 - N"
+TaiKhoan ||--o{ BaoVatTu : "1 - N"
+SuDungNguyenLieu |o--o| BaoVatTu : "sau duyet"
+TaiKhoan ||--o{ ThanhVienTo : "to truong"
+TaiKhoan ||--o{ ThanhVienTo : "nhan vien"
+
+@enduml

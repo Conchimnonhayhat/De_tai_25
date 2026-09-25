@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block page_title %}Thành Viên Tổ Sản Xuất{% endblock %}
+{% block page_subtitle %}Quản lý xưởng xác định nhân viên mà từng tổ trưởng được giao việc{% endblock %}
+
+{% block header_actions %}
+{% if session.get('user_role') == 'QuanLyXuong' %}
+<button type="button" class="btn btn-primary" onclick="toggleTeamDrawer()">
+    <i class="fa-solid fa-user-plus"></i> Thêm Vào Tổ
+</button>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="grid-layout">
+    {% if session.get('user_role') == 'QuanLyXuong' %}
+    <div class="action-drawer" id="teamDrawer" style="display: none; margin-bottom: 24px;">
+        <div class="action-drawer-header" onclick="toggleTeamDrawer()">
+            <h3><i class="fa-solid fa-user-plus text-primary"></i> Thêm Nhân Viên Vào Tổ Sản Xuất</h3>
+            <button type="button" class="btn btn-ghost btn-xs"><i class="fa-solid fa-xmark"></i> Đóng</button>
+        </div>
+        <div class="action-drawer-body">
+            <form action="{{ url_for('workshop.teams') }}" method="POST" class="standard-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-row">
+                    <div class="form-group col-6">
+                        <label for="leader-id">Tổ Trưởng Phụ Trách *</label>
+                        <select id="leader-id" name="leader_id" required>
+                            <option value="">-- Chọn tổ trưởng --</option>
+                            {% for leader in leaders %}
+                            <option value="{{ leader.id }}">{{ leader.name }} (ID #{{ leader.id }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group col-6">
+                        <label for="worker-id">Nhân Viên Chỉ Định *</label>
+                        <select id="worker-id" name="worker_id" required>
+                            <option value="">-- Chọn nhân viên --</option>
+                            {% for worker in workers %}
+                            <option value="{{ worker.id }}">{{ worker.name }} (ID #{{ worker.id }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" class="btn btn-outline" onclick="toggleTeamDrawer()">Hủy bỏ</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fa-solid fa-plus-circle"></i> Thêm Vào Tổ
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header">
+            <h3><i class="fa-solid fa-users text-primary"></i> Danh Sách Thành Viên Thuộc Các Tổ</h3>
+            {% if session.get('user_role') == 'QuanLyXuong' %}
+            <button type="button" class="btn btn-sm btn-outline" onclick="toggleTeamDrawer()">
+                <i class="fa-solid fa-plus"></i> Thêm thành viên
+            </button>
+            {% endif %}
+        </div>
+        <div class="card-body table-responsive">
+            {% if memberships %}
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th style="width: 40%;">Tổ Trưởng</th>
+                        <th style="width: 40%;">Nhân Viên Thuộc Tổ</th>
+                        <th style="width: 20%; text-align: right;">Thao Tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for membership in memberships %}
+                <tr>
+                    <td>
+                        <div class="account-cell">
+                            <div class="account-avatar" style="width:32px;height:32px;flex:0 0 32px;font-size:12px;background:linear-gradient(135deg,#fef3c7,#fed7aa);color:#b45309;">
+                                {{ membership.TenToTruong[:1]|upper }}
+                            </div>
+                            <div>
+                                <strong style="color: #0f172a;">{{ membership.TenToTruong }}</strong>
+                                <small style="display:block;color:#64748b;">Mã: {{ membership.MaToTruong }}</small>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="account-cell">
+                            <div class="account-avatar" style="width:32px;height:32px;flex:0 0 32px;font-size:12px;">
+                                {{ membership.TenNhanVien[:1]|upper }}
+                            </div>
+                            <div>
+                                <strong style="color: #0f172a;">{{ membership.TenNhanVien }}</strong>
+                                <small style="display:block;color:#64748b;">Mã: {{ membership.MaNhanVien }}</small>
+                            </div>
+                        </div>
+                    </td>
+                    <td style="text-align: right;">
+                        <form action="{{ url_for('workshop.remove_team_member', leader_id=membership.MaToTruong, worker_id=membership.MaNhanVien) }}" method="POST"
+                              data-confirm="Gỡ {{ membership.TenNhanVien }} khỏi tổ của {{ membership.TenToTruong }}?">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-soft-danger btn-sm" title="Gỡ nhân viên khỏi tổ này">
+                                <i class="fa-solid fa-user-minus"></i> Gỡ khỏi tổ
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div style="padding: 30px 20px; text-align: center; color: #64748b;">
+                <i class="fa-solid fa-users-slash" style="font-size: 32px; color: #cbd5e1; margin-bottom: 8px; display: block;"></i>
+                <p>Chưa có thành viên nào trong các tổ. Nhấn "Thêm Vào Tổ" để chỉ định nhân sự.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleTeamDrawer() {
+    const drawer = document.getElementById('teamDrawer');
+    if (drawer) {
+        if (drawer.style.display === 'none' || drawer.style.display === '') {
+            drawer.style.display = 'block';
+            drawer.scrollIntoView({ behavior: 'smooth' });
+        } else {
+            drawer.style.display = 'none';
+        }
+    }
+}
+</script>
+{% endblock %}

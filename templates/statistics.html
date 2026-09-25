@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block page_title %}Báo Cáo & Thống Kê Xưởng Sản Xuất{% endblock %}
+{% block page_subtitle %}Thống kê tiến độ (FR-12), năng suất từng công đoạn (FR-13) và tỷ lệ lỗi theo BR-06{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('workshop.production') }}" class="btn btn-outline">
+    <i class="fa-solid fa-gears"></i> Điều Hành Công Đoạn
+</a>
+<a href="{{ url_for('workshop.orders') }}" class="btn btn-primary">
+    <i class="fa-solid fa-clipboard-list"></i> Xem Đơn Hàng
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="grid-layout">
+    <!-- Defect Rate Card (BR-06) -->
+    <div class="card defect-formula-card" style="border-left: 4px solid var(--danger);">
+        <div class="card-header">
+            <h3><i class="fa-solid fa-square-root-variable text-danger"></i> Thống Kê Tỷ Lệ Lỗi Sản Xuất (FR-14 & BR-06)</h3>
+            <span class="badge badge-primary">Quy Tắc Nghiệp Vụ BR-06</span>
+        </div>
+        <div class="card-body">
+            <div class="formula-box">
+                <p><strong>Công thức tính toán theo URD:</strong></p>
+                <div class="formula-math" style="background:#f8fafc; padding: 12px 16px; border-radius: 8px; border: 1px dashed #cbd5e1; font-weight:600; color: #1e293b;">
+                    Tỷ lệ lỗi (%) = (Tổng số lượng sản phẩm hỏng / Tổng sản lượng ghi nhận) &times; 100%
+                </div>
+                <div class="formula-result mt-3" style="display: flex; gap: 16px; flex-wrap: wrap;">
+                    <div class="res-item" style="padding: 12px 18px; background: #fff; border: 1px solid var(--border-color); border-radius: 10px; flex: 1; min-width: 160px;">
+                        <span class="text-muted" style="font-size: 12px; display: block;">Tổng sản phẩm hỏng</span>
+                        <strong style="font-size: 20px; color: #dc2626;">{{ defect_stats.total_defective }}</strong>
+                    </div>
+                    <div class="res-item" style="padding: 12px 18px; background: #fff; border: 1px solid var(--border-color); border-radius: 10px; flex: 1; min-width: 160px;">
+                        <span class="text-muted" style="font-size: 12px; display: block;">Tổng sản lượng hoàn thành</span>
+                        <strong style="font-size: 20px; color: #059669;">{{ defect_stats.total_output }}</strong>
+                    </div>
+                    <div class="res-item highlight" style="padding: 12px 18px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; flex: 1.2; min-width: 180px;">
+                        <span class="text-muted" style="font-size: 12px; display: block;">Tỷ lệ lỗi tính toán</span>
+                        <strong class="text-danger" style="font-size: 24px;">{{ defect_stats.defect_rate }}%</strong>
+                        <span class="badge badge-light" style="margin-left: 6px;">{{ defect_stats.status }}</span>
+                    </div>
+                </div>
+                <p class="text-muted small mt-2">
+                    <i class="fa-solid fa-info-circle"></i> {{ defect_stats.formula_note }}
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Productivity by Operation (FR-13) -->
+    <div class="card">
+        <div class="card-header">
+            <h3><i class="fa-solid fa-industry text-primary"></i> Năng Suất Theo Từng Công Đoạn (FR-13)</h3>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 15%;">Thứ Tự</th>
+                            <th style="width: 35%;">Tên Công Đoạn</th>
+                            <th style="width: 30%;">Sản Phẩm Áp Dụng</th>
+                            <th style="width: 20%; text-align: right;">Tổng Sản Lượng Đạt</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for prod in productivity %}
+                        <tr>
+                            <td>
+                                <span class="badge" style="background:#eff6ff; color:#2563eb; font-weight:700;">
+                                    Bước {{ prod.ThuTu }}
+                                </span>
+                            </td>
+                            <td><strong style="color: #0f172a;">{{ prod.TenCongDoan }}</strong></td>
+                            <td>{{ prod.TenSanPham }}</td>
+                            <td style="text-align: right;">
+                                <span class="badge badge-success" style="font-size: 13px; padding: 4px 10px;">
+                                    {{ prod.TongSanLuong }} sản phẩm
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Order Progress Matrix (FR-12) -->
+    <div class="card">
+        <div class="card-header">
+            <h3><i class="fa-solid fa-bars-progress text-primary"></i> Bảng Tổng Hợp Tiến Độ Các Đơn Hàng (FR-12)</h3>
+            <a href="{{ url_for('workshop.orders') }}" class="btn btn-sm btn-outline">
+                <i class="fa-solid fa-list"></i> Xem tất cả đơn
+            </a>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 15%;">Đơn Hàng</th>
+                            <th style="width: 25%;">Sản Phẩm</th>
+                            <th style="width: 20%;">Sản Lượng Đạt / Yêu Cầu</th>
+                            <th style="width: 20%;">Tỷ Lệ Hoàn Thành</th>
+                            <th style="width: 10%;">Hạn Bàn Giao</th>
+                            <th style="width: 10%;">Trạng Thái</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in progress_summary %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('workshop.production', order_id=p.order_id) }}" style="text-decoration:none; font-weight:700; color:#2563eb;">
+                                    Đơn #{{ p.order_id }}
+                                </a>
+                            </td>
+                            <td><strong style="color: #0f172a;">{{ p.product_name }}</strong></td>
+                            <td>{{ p.completed_qty }} / {{ p.requested_qty }}</td>
+                            <td>
+                                <div class="progress-bar-container">
+                                    <div class="progress-bar-fill" style="width: {{ p.progress_percent }}%;"></div>
+                                </div>
+                                <span class="progress-text">{{ p.progress_percent }}%</span>
+                            </td>
+                            <td><small class="text-muted">{{ p.due_date }}</small></td>
+                            <td>
+                                <span class="badge {% if p.status == 'Hoàn thành' %}badge-success{% elif p.status == 'Đang thực hiện' %}badge-warning{% else %}badge-info{% endif %}">
+                                    {{ p.status }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

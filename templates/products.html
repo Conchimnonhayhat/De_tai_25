@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+
+{% block page_title %}Sản Phẩm & Định Mức Vật Tư{% endblock %}
+{% block page_subtitle %}Quản lý danh mục sản phẩm, định mức nguyên liệu (BOM) và quy trình công đoạn{% endblock %}
+
+{% block header_actions %}
+{% if session.get('user_role') == 'QuanLyXuong' %}
+<button type="button" class="btn btn-primary" onclick="toggleCreateProductDrawer()">
+    <i class="fa-solid fa-plus-circle"></i> Khai Báo Sản Phẩm Mới
+</button>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<!-- Quick Summary Stats Bar -->
+<div class="summary-pills-row">
+    <div class="summary-pill">
+        <i class="fa-solid fa-boxes-stacked text-primary"></i>
+        <span>Tổng sản phẩm: <strong>{{ products|length }}</strong> danh mục</span>
+    </div>
+    <div class="summary-pill">
+        <i class="fa-solid fa-layer-group text-purple"></i>
+        <span>Có định mức BOM: <strong>{{ bom_product_count }}/{{ products|length }}</strong> sản phẩm</span>
+    </div>
+    <div class="summary-pill">
+        <i class="fa-solid fa-gears text-success"></i>
+        <span>Có công đoạn: <strong>{{ operation_product_count }}/{{ products|length }}</strong> sản phẩm</span>
+    </div>
+</div>
+
+{% if session.get('user_role') == 'QuanLyXuong' %}
+<!-- Collapsible Drawer: Khai Báo Sản Phẩm Mới -->
+<div id="createProductDrawer" class="action-drawer" style="display: {% if form_data %}block{% else %}none{% endif %};">
+    <div class="action-drawer-header" onclick="toggleCreateProductDrawer()">
+        <h3><i class="fa-solid fa-plus-circle text-primary"></i> Khai Báo Sản Phẩm Mới & Định Mức Vật Tư</h3>
+        <button type="button" class="btn btn-ghost btn-xs" aria-label="Đóng bảng"><i class="fa-solid fa-xmark"></i> Đóng</button>
+    </div>
+    <div class="action-drawer-body">
+        <form action="{{ url_for('workshop.products') }}" method="POST" class="standard-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-row">
+                <div class="form-group col-4">
+                    <label for="product_id">Mã Sản Phẩm *</label>
+                    <input type="text" id="product_id" name="product_id" maxlength="32" required value="{{ form_data.get('product_id', '') }}" placeholder="Ví dụ: SP0003">
+                </div>
+                <div class="form-group col-8">
+                    <label for="name">Tên Sản Phẩm *</label>
+                    <input type="text" id="name" name="name" maxlength="150" required value="{{ form_data.get('name', '') }}" placeholder="Tên sản phẩm cơ khí">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group col-4">
+                    <label for="unit">Đơn Vị Tính *</label>
+                    <input type="text" id="unit" name="unit" maxlength="20" required value="{{ form_data.get('unit', '') }}" placeholder="Cái, Bộ, Khung...">
+                </div>
+                <div class="form-group col-8">
+                    <label for="desc">Mô Tả Quy Cách</label>
+                    <input type="text" id="desc" name="desc" value="{{ form_data.get('desc', '') }}" placeholder="Thông số kỹ thuật sơ bộ">
+                </div>
+            </div>
+
+            <!-- Định mức BOM -->
+            <div class="bom-entry" style="background: #fafbfc; border-radius: 12px; padding: 18px; margin-top: 10px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <h4 style="margin: 0; font-size: 14px; color: #1e293b;">
+                        <i class="fa-solid fa-layer-group text-primary"></i> Định mức nguyên vật liệu (BOM cho 1 sản phẩm)
+                    </h4>
+                    <button type="button" id="bom-add" class="btn btn-soft-primary btn-xs" {% if not materials %}disabled{% endif %}>
+                        <i class="fa-solid fa-plus"></i> Thêm định mức vật tư
+                    </button>
+                </div>
+                <p class="text-muted" style="font-size: 12.5px; margin-bottom: 14px;">
+                    Chọn vật tư từ kho và nhập số lượng định mức cần dùng để tạo nên 1 đơn vị thành phẩm (BR-04).
+                </p>
+                {% if not materials %}
+                <p class="text-muted">Kho chưa có vật tư. <a href="{{ url_for('workshop.inventory') }}">Khai báo vật tư trước</a> để chọn khi tạo sản phẩm.</p>
+                {% endif %}
+                <div id="bom-rows">
+                    {% for row in bom_rows %}
+                    <div class="bom-entry-row" style="margin-bottom: 10px;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label style="font-size: 12px;">Vật tư</label>
+                            <select name="bom_material_id[]" aria-label="Định mức vật tư">
+                                <option value="">-- Chọn vật tư --</option>
+                                {% for material in materials %}
+                                <option value="{{ material.id }}" {% if row.material_id == material.id %}selected{% endif %}>{{ material.id }} — {{ material.name }} ({{ material.unit }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label style="font-size: 12px;">Số lượng định mức / 1 sản phẩm</label>
+                            <input type="number" name="bom_quantity[]" aria-label="Số lượng định mức" min="0.0001" max="99999999999999.9999" step="0.0001" value="{{ row.quantity }}" placeholder="Ví dụ: 2.5">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label style="font-size: 12px;">Ghi chú</label>
+                            <input type="text" name="bom_note[]" aria-label="Ghi chú vật tư" maxlength="255" value="{{ row.note }}" placeholder="Quy cách hoặc cách dùng">
+                        </div>
+                        <button type="button" class="btn btn-soft-danger btn-sm bom-remove" aria-label="Xóa dòng định mức" title="Xóa dòng này" style="align-self: flex-end;">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px;">
+                <button type="button" class="btn btn-outline" onclick="toggleCreateProductDrawer()">Hủy bỏ</button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fa-solid fa-floppy-disk"></i> Lưu sản phẩm & định mức
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<!-- Danh sách sản phẩm & Định mức BOM -->
+<div class="card">
+    <div class="card-header">
+        <h3><i class="fa-solid fa-list-check text-primary"></i> Danh sách sản phẩm & định mức vật tư</h3>
+        {% if session.get('user_role') == 'QuanLyXuong' %}
+        <button type="button" class="btn btn-sm btn-outline" onclick="toggleCreateProductDrawer()">
+            <i class="fa-solid fa-plus"></i> Khai báo mới
+        </button>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        <form method="GET" class="filter-form" aria-label="Tìm sản phẩm">
+            <input type="search" name="q" value="{{ q }}" placeholder="Tìm theo mã hoặc tên sản phẩm..." aria-label="Mã hoặc tên sản phẩm">
+            <button type="submit" class="btn btn-primary">
+                <i class="fa-solid fa-filter"></i> Tìm
+            </button>
+            <a href="{{ url_for('workshop.products') }}" class="btn btn-outline" title="Xóa lọc">
+                <i class="fa-solid fa-rotate-left"></i> Xóa lọc
+            </a>
+        </form>
+
+        {% for p in products %}
+        <div class="order-card product-card">
+            <div class="order-header-line">
+                <div>
+                    <span class="badge badge-primary" style="font-size: 13px; font-weight: 700; padding: 4px 10px;">{{ p.id }}</span>
+                    <strong style="font-size: 16px; margin-left: 6px; color: #0f172a;">{{ p.name }}</strong>
+                    <span class="badge badge-light" style="background:#f1f5f9; color:#475569; margin-left: 6px;">Đơn vị: {{ p.unit }}</span>
+                    <p class="text-muted" style="margin: 4px 0 0; font-size: 13px;">{{ p.description or 'Không có mô tả quy cách' }}</p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="badge badge-success">{{ p.status }}</span>
+                    {% if session.get('user_role') == 'QuanLyXuong' %}
+                    <a href="{{ url_for('workshop.edit_product', product_id=p.id) }}" class="btn btn-sm btn-soft-primary" title="Chỉnh sửa sản phẩm và định mức vật tư">
+                        <i class="fa-solid fa-pen-to-square"></i> Sửa sản phẩm & định mức BOM
+                    </a>
+                    <form action="{{ url_for('workshop.delete_product', product_id=p.id) }}" method="POST" class="product-delete-form" style="margin: 0;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="delete_token" value="{{ session.get('_product_delete_token', '') }}">
+                        <button type="submit" class="btn btn-sm btn-soft-danger" aria-label="Xóa sản phẩm {{ p.id }}" title="Xóa sản phẩm">
+                            <i class="fa-solid fa-trash-can"></i> Xóa
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Định mức BOM Table -->
+            <div class="bom-section" style="margin-top: 14px; background: #fafbfc; border: 1px solid #f1f5f9; border-radius: 10px; padding: 14px;">
+                <h5 style="margin-bottom: 10px; font-size: 13px; color: #334155; display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-layer-group text-primary"></i> Định mức vật tư cho 1 {{ p.unit }}:
+                </h5>
+                {% set pbom = boms.get(p.id, []) %}
+                {% if pbom %}
+                <div class="table-responsive">
+                    <table class="data-table table-sm">
+                        <thead>
+                            <tr>
+                                <th style="width: 15%;">Mã Vật Tư</th>
+                                <th style="width: 30%;">Tên Nguyên Liệu</th>
+                                <th style="width: 18%;">Số lượng định mức</th>
+                                <th style="width: 12%;">Đơn Vị</th>
+                                <th style="width: 25%;">Ghi Chú</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for b in pbom %}
+                            <tr>
+                                <td><code>{{ b.material_id }}</code></td>
+                                <td><strong>{{ b.material_name }}</strong></td>
+                                <td><span class="badge badge-light" style="background:#ffffff; border:1px solid #e2e8f0; font-weight:700;">{{ b.standard_qty }}</span></td>
+                                <td>{{ b.unit }}</td>
+                                <td><small class="text-muted">{{ b.note or '—' }}</small></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted italic" style="font-size: 12.5px; margin: 4px 0;">Chưa thiết lập định mức vật tư cho sản phẩm này.</p>
+                {% endif %}
+            </div>
+
+            <!-- Quy trình công đoạn -->
+            <div class="bom-section" style="margin-top: 12px; background: #fafbfc; border: 1px solid #f1f5f9; border-radius: 10px; padding: 14px;">
+                <h5 style="margin-bottom: 10px; font-size: 13px; color: #334155; display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-gears text-purple"></i> Quy trình các công đoạn sản xuất:
+                </h5>
+                {% set product_operations = operations_by_product.get(p.id, []) %}
+                {% if product_operations %}
+                <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+                    {% for op in product_operations %}
+                    <div style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px;" title="Mã kỹ thuật: {{ op.id }}">
+                        <span class="badge badge-primary" style="font-size: 11px; padding: 2px 7px;">Bước {{ op.step_order if op.step_order is defined else loop.index }}</span>
+                        <strong>{{ op.name }}</strong>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted" style="font-size: 12.5px; margin: 4px 0;">Chưa có công đoạn nào được khai báo cho sản phẩm này.</p>
+                {% endif %}
+
+                {% if session.get('user_role') == 'QuanLyXuong' %}
+                <form action="{{ url_for('workshop.create_operation', product_id=p.id) }}" method="POST" style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e2e8f0;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="form-row" style="align-items: flex-end;">
+                        <div class="form-group col-4" style="margin-bottom: 0;">
+                            <label style="font-size: 12px;">Tên công đoạn mới *</label>
+                            <input name="name" maxlength="100" required placeholder="Ví dụ: Sơn tĩnh điện..." style="padding: 6px 10px; font-size: 12.5px;">
+                        </div>
+                        <div class="form-group col-3" style="margin-bottom: 0;">
+                            <label style="font-size: 12px;">Thứ tự bước *</label>
+                            <input name="step_order" type="number" min="1" required placeholder="1, 2, 3..." style="padding: 6px 10px; font-size: 12.5px;">
+                        </div>
+                        <div class="form-group col-3" style="margin-bottom: 0;">
+                            <label style="font-size: 12px;">Mô tả kỹ thuật</label>
+                            <input name="desc" placeholder="Yêu cầu kỹ thuật..." style="padding: 6px 10px; font-size: 12.5px;">
+                        </div>
+                        <div class="col-2" style="display: flex;">
+                            <button type="submit" class="btn btn-outline btn-sm" style="width: 100%; white-space: nowrap;">
+                                <i class="fa-solid fa-plus"></i> Thêm bước
+                            </button>
+                        </div>
+                    </div>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+
+        {% if not products %}
+        <div style="padding: 40px 20px; text-align: center; color: #64748b;">
+            <i class="fa-solid fa-boxes-stacked" style="font-size: 36px; margin-bottom: 12px; color: #cbd5e1; display: block;"></i>
+            <p>Không tìm thấy sản phẩm phù hợp với bộ lọc hiện tại.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if session.get('user_role') == 'QuanLyXuong' %}
+<script>
+function toggleCreateProductDrawer() {
+    const drawer = document.getElementById('createProductDrawer');
+    if (drawer) {
+        if (drawer.style.display === 'none' || drawer.style.display === '') {
+            drawer.style.display = 'block';
+            drawer.scrollIntoView({ behavior: 'smooth' });
+        } else {
+            drawer.style.display = 'none';
+        }
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const rows = document.getElementById('bom-rows');
+    const add = document.getElementById('bom-add');
+    if (rows && add) {
+        add.addEventListener('click', function () {
+            const source = rows.querySelector('.bom-entry-row');
+            if (!source) return;
+            const row = source.cloneNode(true);
+            row.querySelectorAll('input, select').forEach(field => { field.value = ''; });
+            rows.appendChild(row);
+        });
+        rows.addEventListener('click', function (event) {
+            if (!event.target.closest('.bom-remove')) return;
+            const row = event.target.closest('.bom-entry-row');
+            if (rows.children.length > 1) {
+                row.remove();
+            } else {
+                row.querySelectorAll('input, select').forEach(field => { field.value = ''; });
+            }
+        });
+    }
+    document.querySelectorAll('.product-delete-form').forEach(form => {
+        form.addEventListener('submit', function (event) {
+            if (!confirm('Xóa sản phẩm này? Định mức vật tư và công đoạn chưa sử dụng đi kèm cũng sẽ bị xóa.')) {
+                event.preventDefault();
+            }
+        });
+    });
+});
+</script>
+{% endif %}
+{% endblock %}

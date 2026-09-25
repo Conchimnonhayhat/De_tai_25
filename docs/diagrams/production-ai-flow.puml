@@ -1,0 +1,62 @@
+@startuml
+skinparam activityFontSize 12
+skinparam activityDiamondFontSize 11
+skinparam shadowing false
+
+title Sơ Đồ Luồng Dữ Liệu Trợ Lý AI Sản Xuất (Production AI Data Flow)
+
+start
+
+:Quản lý xưởng / Tổ trưởng gửi yêu cầu qua Web UI;\n(Ví dụ: "Tóm tắt tiến độ Đơn 25" hoặc bộ lọc đơn/khoảng thời gian);
+
+partition "Tầng Controller & Security" {
+    :Kiểm tra xác thực phiên & Quyền hạn RBAC;\n(Chỉ Quản lý xưởng & Tổ trưởng);
+    if (Quyền hợp lệ?) then (Hợp lệ)
+    else (Từ chối)
+        #pink:Trả về 403 Forbidden;
+        stop
+    endif
+}
+
+partition "Tầng Phân Tích & Truy Xuất Dữ Liệu" {
+    :Request Analyzer chuẩn hóa thành Structured Intent;\n(task_type, order_ids, date_range, max_suggestions);
+    
+    :Production Data Retriever thực thi SQL tham số hóa;\n(Truy xuất snapshot CSDL từ MySQL);
+    
+    if (Có bản ghi dữ liệu không?) then (Có dữ liệu)
+    else (Không có bản ghi)
+        :Trả về trạng thái 'no_data';\n(Thông báo: Không tìm thấy dữ liệu trong phạm vi chọn);
+        stop
+    endif
+}
+
+partition "Tầng Chuẩn Bị & Điều Phối AI" {
+    :Context Builder tính toán Facts định lượng;\n(Sản lượng, tiến độ %, tỷ lệ lỗi, tình trạng vật tư, source_ids);
+    
+    :Prompt Builder áp đặt Grounding Rules;\n(Nghiêm cấm bịa số liệu, yêu cầu xuất định dạng JSON Schema);
+    
+    :Gemini Service Adapter gửi HTTPS Request;\n(Bảo mật API key, timeout handling 30s);
+    
+    :Google Gemini API sinh phản hồi văn bản;
+}
+
+partition "Tầng Kiểm Chứng & Xem Xét (Human Gate)" {
+    :Response Validator đối chiếu số liệu phản hồi với Facts gốc CSDL;
+    
+    if (Số liệu khớp & JSON hợp lệ?) then (Khớp)
+        :Gán trạng thái 'ok';
+    else (Sai lệch / Thiếu căn cứ)
+        #pink:Gán trạng thái 'needs_review' hoặc 'data_issues';\n(Cảnh báo dữ liệu mâu thuẫn);
+    endif
+    
+    :Hiển thị kết quả lên giao diện Trợ lý AI;\n(Phân định rõ Dữ kiện vs Giả thuyết nguyên nhân);
+    
+    if (Quản lý xưởng đồng ý với gợi ý ưu tiên?) then (Đồng ý)
+        :Quản lý bấm nút "Xác nhận & Áp dụng" trên UI;\n(Hệ thống cập nhật CSDL bằng endpoint nghiệp vụ riêng);
+    else (Không đồng ý)
+        :Giữ nguyên kế hoạch hiện tại;
+    endif
+}
+
+stop
+@enduml

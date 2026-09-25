@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng Nhập - AI WORKSHOP Hệ Thống Quản Lý Xưởng</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body class="login-body">
+    <!-- Ambient ambient lighting background -->
+    <div class="login-glow-1"></div>
+    <div class="login-glow-2"></div>
+    <div class="login-grid-bg"></div>
+
+    <div class="login-container">
+        <div class="login-card">
+            <!-- Brand & Header -->
+            <div class="login-header">
+                <div class="login-icon-badge">
+                    <i class="fa-solid fa-industry"></i>
+                </div>
+                <h1 class="login-title"><span>AI WORKSHOP</span></h1>
+                <p class="login-subtitle">Hệ Thống Quản Lý Xưởng Sản Xuất Thông Minh</p>
+                <div class="badge-ai-pill">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> AI-Augmented SDLC
+                </div>
+            </div>
+
+            <!-- Flash Notifications -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="flash-messages">
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }}">
+                                <i class="fa-solid {% if category == 'success' %}fa-circle-check{% elif category == 'danger' %}fa-circle-exclamation{% else %}fa-circle-info{% endif %} alert-icon"></i>
+                                <span class="alert-text">{{ message }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <!-- Login Form -->
+            <form action="{{ url_for('auth.login') }}" method="POST" class="login-form" id="loginForm">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="login-form-group">
+                    <label for="email" class="login-label">
+                        <span class="login-label-title">
+                            <i class="fa-regular fa-envelope"></i> Email Đăng Nhập
+                        </span>
+                    </label>
+                    <div class="input-container">
+                        <span class="input-icon-left"><i class="fa-solid fa-at"></i></span>
+                        <input
+                            type="email"
+                            id="email"
+                            name="email"
+                            class="login-input"
+                            required
+                            placeholder="name@workshop.edu.vn"
+                            autocomplete="username"
+                        >
+                    </div>
+                </div>
+
+                <div class="login-form-group">
+                    <label for="password" class="login-label">
+                        <span class="login-label-title">
+                            <i class="fa-solid fa-lock"></i> Mật Khẩu
+                        </span>
+                    </label>
+                    <div class="input-container">
+                        <span class="input-icon-left"><i class="fa-solid fa-key"></i></span>
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            class="login-input"
+                            required
+                            placeholder="Mật khẩu của bạn"
+                            autocomplete="current-password"
+                        >
+                        <button type="button" class="btn-toggle-eye" id="togglePassword" title="Ẩn/Hiện mật khẩu" aria-label="Ẩn/Hiện mật khẩu">
+                            <i class="fa-regular fa-eye" id="eyeIcon"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-options">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="remember" checked>
+                        <span>Ghi nhớ đăng nhập</span>
+                    </label>
+                    <a href="javascript:void(0)" class="help-link" id="helpLink">Quên mật khẩu?</a>
+                </div>
+
+                <button type="submit" class="btn-login-submit" id="submitBtn">
+                    <i class="fa-solid fa-arrow-right-to-bracket"></i>
+                    <span>Đăng Nhập Hệ Thống</span>
+                </button>
+            </form>
+
+            <div class="auth-switch-row">
+                <span>Chưa có tài khoản?</span>
+                <a href="{{ url_for('auth.register') }}">
+                    <i class="fa-solid fa-user-plus"></i> Gửi yêu cầu đăng ký tài khoản
+                </a>
+            </div>
+
+            <!-- Page Footer Note -->
+            <div class="login-page-footer">
+                <i class="fa-solid fa-shield-check"></i>
+                <span>Bảo mật kết nối SSL • Tiêu chuẩn Công Nghiệp 4.0</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Client-side Interactive Logic -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const emailInput = document.getElementById('email');
+            const passwordInput = document.getElementById('password');
+            const togglePasswordBtn = document.getElementById('togglePassword');
+            const eyeIcon = document.getElementById('eyeIcon');
+            const helpLink = document.getElementById('helpLink');
+            const loginForm = document.getElementById('loginForm');
+            const submitBtn = document.getElementById('submitBtn');
+
+            // 1. Password Visibility Toggle
+            if (togglePasswordBtn && passwordInput && eyeIcon) {
+                togglePasswordBtn.addEventListener('click', () => {
+                    const isPassword = passwordInput.getAttribute('type') === 'password';
+                    passwordInput.setAttribute('type', isPassword ? 'text' : 'password');
+                    eyeIcon.className = isPassword ? 'fa-regular fa-eye-slash' : 'fa-regular fa-eye';
+                    passwordInput.focus();
+                });
+            }
+
+            // 2. Help Link Modal Alert
+            if (helpLink) {
+                helpLink.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    alert('Hệ thống Quản Lý Xưởng:\nVui lòng liên hệ quản trị viên (admin@workshop.edu.vn) để được hỗ trợ cấp lại mật khẩu.');
+                });
+            }
+
+            // 3. Form Submit Loading Indicator
+            if (loginForm && submitBtn) {
+                loginForm.addEventListener('submit', () => {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Đang xác thực...</span>';
+                    submitBtn.style.opacity = '0.85';
+                });
+            }
+        });
+    </script>
+</body>
+</html>

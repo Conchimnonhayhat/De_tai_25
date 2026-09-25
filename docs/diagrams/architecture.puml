@@ -1,0 +1,85 @@
+@startuml
+skinparam componentStyle uml2
+skinparam packageStyle rectangle
+skinparam shadowing false
+
+package "Client Layer (Web Browser)" {
+    [Web UI: HTML5 / CSS / Vanilla JS] as UI
+}
+
+package "Routing & Presentation Layer (Flask Web App)" {
+    [Auth Controller\n(routes/auth_routes.py)] as AuthController
+    [Workshop Controller\n(routes/workshop_routes.py)] as WorkshopController
+    [AI API Controller\n(routes/ai_routes.py)] as AIController
+}
+
+package "Business Logic Layer (Services)" {
+    [Auth Service] as AuthService
+    [Order Service] as OrderService
+    [Product & BOM Service] as ProductService
+    [Production Service] as ProductionService
+    [Statistics Service] as StatsService
+    
+    package "Production AI Engine" {
+        [Request Analyzer] as Analyzer
+        [Data Retriever] as Retriever
+        [Context Builder] as ContextBuilder
+        [Prompt Builder] as PromptBuilder
+        [Response Validator] as Validator
+    }
+}
+
+package "Data Access Layer (DAO / Repositories)" {
+    [Database Connection & Transaction Pool] as DBConn
+    [Relational DAO: SQL Parameterized] as DAO
+}
+
+database "MySQL Database (11 Tables)" {
+    folder "Relational Tables" {
+        [DonSanXuat]
+        [SanPham]
+        [NguyenLieu]
+        [CongDoan]
+        [TienDoCongDoan]
+        [SuDungNguyenLieu]
+        [LoiSanXuat]
+    }
+}
+
+cloud "External AI Provider" {
+    [Google Gemini API] as Gemini
+    [Gemini Service Adapter] as GeminiAdapter
+}
+
+' Liên kết các tầng
+UI --> AuthController : HTTP Request
+UI --> WorkshopController : HTTP Request / Form
+UI --> AIController : Fetch POST (JSON)
+
+AuthController --> AuthService
+WorkshopController --> ProductService
+WorkshopController --> OrderService
+WorkshopController --> ProductionService
+WorkshopController --> StatsService
+
+AIController --> Analyzer
+Analyzer --> Retriever
+Retriever --> DAO
+Retriever --> ContextBuilder
+ContextBuilder --> PromptBuilder
+PromptBuilder --> GeminiAdapter
+GeminiAdapter --> Gemini : HTTPS API Call
+Gemini --> GeminiAdapter : Raw Response
+GeminiAdapter --> Validator
+Validator --> AIController : Validated JSON
+
+AuthService --> DAO
+ProductService --> DAO
+OrderService --> DAO
+ProductionService --> DAO
+StatsService --> DAO
+
+DAO --> DBConn
+DBConn --> [Relational Tables] : SQL (Execute / Commit / Rollback)
+
+@enduml

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng Ký - AI WORKSHOP</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body class="login-body">
+    <div class="login-glow-1"></div>
+    <div class="login-glow-2"></div>
+    <div class="login-grid-bg"></div>
+
+    <div class="login-container register-container">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="login-icon-badge"><i class="fa-solid fa-user-plus"></i></div>
+                <h1 class="login-title"><span>TẠO TÀI KHOẢN</span></h1>
+                <p class="login-subtitle">Đăng ký tài khoản để tham gia hệ thống xưởng</p>
+                <div class="badge-ai-pill">
+                    <i class="fa-solid fa-id-badge"></i> Tài khoản cần được duyệt trước khi sử dụng
+                </div>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="flash-messages">
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }}">
+                                <i class="fa-solid {% if category == 'success' %}fa-circle-check{% elif category == 'danger' %}fa-circle-exclamation{% else %}fa-circle-info{% endif %} alert-icon"></i>
+                                <span class="alert-text">{{ message }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <form action="{{ url_for('auth.register') }}" method="POST" class="login-form" id="registerForm">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="login-form-group">
+                    <label for="account_code" class="login-label"><span class="login-label-title"><i class="fa-solid fa-id-card"></i> Mã tài khoản (tùy chọn)</span></label>
+                    <div class="input-container">
+                        <span class="input-icon-left"><i class="fa-solid fa-hashtag"></i></span>
+                        <input type="text" id="account_code" name="account_code" class="login-input" maxlength="32"
+                               value="{{ request.form.get('account_code', '') }}" placeholder="Ví dụ: DTC12345; để trống để tự tạo">
+                    </div>
+                </div>
+                <div class="login-form-group">
+                    <label for="name" class="login-label"><span class="login-label-title"><i class="fa-regular fa-user"></i> Họ và tên</span></label>
+                    <div class="input-container">
+                        <span class="input-icon-left"><i class="fa-solid fa-signature"></i></span>
+                        <input type="text" id="name" name="name" class="login-input" minlength="2" maxlength="100"
+                               value="{{ request.form.get('name', '') }}" placeholder="Nguyễn Văn A" autocomplete="name" required>
+                    </div>
+                </div>
+
+                <div class="login-form-group">
+                    <label for="email" class="login-label"><span class="login-label-title"><i class="fa-regular fa-envelope"></i> Email đăng nhập</span></label>
+                    <div class="input-container">
+                        <span class="input-icon-left"><i class="fa-solid fa-at"></i></span>
+                        <input type="email" id="email" name="email" class="login-input" maxlength="100"
+                               value="{{ request.form.get('email', '') }}" placeholder="name@example.com" autocomplete="email" required>
+                    </div>
+                </div>
+
+                <div class="login-form-group">
+                    <label for="password" class="login-label"><span class="login-label-title"><i class="fa-solid fa-lock"></i> Mật khẩu</span></label>
+                    <div class="input-container">
+                        <span class="input-icon-left"><i class="fa-solid fa-key"></i></span>
+                        <input type="password" id="password" name="password" class="login-input" minlength="6"
+                               placeholder="Tối thiểu 6 ký tự" autocomplete="new-password" required>
+                    </div>
+                </div>
+
+                <div class="login-form-group">
+                    <label for="password_confirmation" class="login-label"><span class="login-label-title"><i class="fa-solid fa-shield-halved"></i> Xác nhận mật khẩu</span></label>
+                    <div class="input-container">
+                        <span class="input-icon-left"><i class="fa-solid fa-check"></i></span>
+                        <input type="password" id="password_confirmation" name="password_confirmation" class="login-input" minlength="6"
+                               placeholder="Nhập lại mật khẩu" autocomplete="new-password" required>
+                    </div>
+                </div>
+
+                <p class="registration-policy">
+                    <i class="fa-solid fa-circle-info"></i>
+                    Sau khi đăng ký, quản trị viên sẽ xác minh và cấp vai trò phù hợp. Bạn chưa thể đăng nhập khi đang chờ duyệt.
+                </p>
+
+                <button type="submit" class="btn-login-submit" id="submitBtn">
+                    <i class="fa-solid fa-user-check"></i><span>Đăng Ký Tài Khoản</span>
+                </button>
+            </form>
+
+            <div class="auth-switch-row">
+                <span>Đã có tài khoản?</span>
+                <a href="{{ url_for('auth.login') }}"><i class="fa-solid fa-arrow-left"></i> Quay lại đăng nhập</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('registerForm').addEventListener('submit', function () {
+            const button = document.getElementById('submitBtn');
+            button.disabled = true;
+            button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Đang tạo tài khoản...</span>';
+        });
+    </script>
+</body>
+</html>

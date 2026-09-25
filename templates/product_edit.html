@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block page_title %}Sửa Sản Phẩm {{ product.id }}{% endblock %}
+{% block page_subtitle %}Cập nhật thông tin sản phẩm và định mức nguyên vật liệu (BOM) cho một đơn vị sản phẩm{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('workshop.products', q=product.id) }}" class="btn btn-outline">
+    <i class="fa-solid fa-arrow-left"></i> Quay Lại Danh Sách
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 900px; margin: 0 auto;">
+    <div class="card-header">
+        <h3><i class="fa-solid fa-pen-to-square text-primary"></i> Chỉnh Sửa Sản Phẩm {{ product.id }} — {{ product.name }}</h3>
+    </div>
+    <div class="card-body">
+        <form action="{{ url_for('workshop.edit_product', product_id=product.id) }}" method="POST" class="standard-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="delete_token" value="{{ session.get('_product_delete_token', '') }}">
+
+            <div class="form-row">
+                <div class="form-group col-8">
+                    <label for="edit-name">Tên sản phẩm *</label>
+                    <input id="edit-name" name="name" required maxlength="150" value="{{ request.form.get('name', product.name) }}">
+                </div>
+                <div class="form-group col-4">
+                    <label for="edit-unit">Đơn vị tính *</label>
+                    <input id="edit-unit" name="unit" required maxlength="20" value="{{ request.form.get('unit', product.unit) }}">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="edit-desc">Mô tả quy cách kỹ thuật</label>
+                <input id="edit-desc" name="desc" value="{{ request.form.get('desc', product.description or '') }}" placeholder="Thông số kỹ thuật sơ bộ">
+            </div>
+
+            <!-- Định mức BOM -->
+            <div class="bom-entry" style="background: #fafbfc; border-radius: 12px; padding: 18px; margin-top: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <h4 style="margin: 0; font-size: 14px; color: #1e293b;">
+                        <i class="fa-solid fa-layer-group text-primary"></i> Định mức nguyên vật liệu (BOM) cho 1 {{ product.unit }}
+                    </h4>
+                    <button type="button" id="edit-bom-add" class="btn btn-soft-primary btn-xs" {% if not materials %}disabled{% endif %}>
+                        <i class="fa-solid fa-plus"></i> Thêm định mức vật tư
+                    </button>
+                </div>
+                <p class="text-muted" style="font-size: 12.5px; margin-bottom: 14px;">
+                    Chỉnh sửa số lượng định mức, chọn vật tư hoặc xóa dòng. Nhấn "Lưu thay đổi" để cập nhật định mức BOM cho sản phẩm.
+                </p>
+                <div id="edit-bom-rows">
+                    {% for row in rows %}
+                    <div class="bom-entry-row" style="margin-bottom: 10px;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label style="font-size: 12px;">Vật tư</label>
+                            <select name="bom_material_id[]" aria-label="Định mức vật tư">
+                                <option value="">-- Chọn vật tư --</option>
+                                {% for material in materials %}
+                                <option value="{{ material.id }}" {% if row.material_id == material.id %}selected{% endif %}>{{ material.id }} — {{ material.name }} ({{ material.unit }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label style="font-size: 12px;">Số lượng định mức / 1 sản phẩm</label>
+                            <input type="number" name="bom_quantity[]" min="0.0001" max="99999999999999.9999" step="0.0001" value="{{ row.quantity }}">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label style="font-size: 12px;">Ghi chú</label>
+                            <input type="text" name="bom_note[]" maxlength="255" value="{{ row.note }}" placeholder="Ghi chú sử dụng">
+                        </div>
+                        <button type="button" class="btn btn-soft-danger btn-sm edit-bom-remove" title="Xóa dòng định mức" style="align-self: flex-end;">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                <a href="{{ url_for('workshop.products', q=product.id) }}" class="btn btn-outline">
+                    <i class="fa-solid fa-arrow-left"></i> Quay lại
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fa-solid fa-floppy-disk"></i> Lưu thay đổi
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const rows = document.getElementById('edit-bom-rows');
+    const add = document.getElementById('edit-bom-add');
+    if (rows && add) {
+        add.addEventListener('click', function () {
+            const source = rows.querySelector('.bom-entry-row');
+            if (!source) return;
+            const row = source.cloneNode(true);
+            row.querySelectorAll('input, select').forEach(field => { field.value = ''; });
+            rows.appendChild(row);
+        });
+        rows.addEventListener('click', function (event) {
+            if (!event.target.closest('.edit-bom-remove')) return;
+            const row = event.target.closest('.bom-entry-row');
+            if (rows.children.length > 1) {
+                row.remove();
+            } else {
+                row.querySelectorAll('input, select').forEach(field => { field.value = ''; });
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

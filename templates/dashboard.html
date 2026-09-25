@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block page_title %}Bảng Điều Khiển Tổng Quan (Dashboard){% endblock %}
+{% block page_subtitle %}Theo dõi tình hình sản xuất, tiến độ các đơn hàng và chỉ số chất lượng xưởng{% endblock %}
+
+{% block header_actions %}
+{% if session.get('user_role') == 'QuanLyXuong' %}
+<a href="{{ url_for('workshop.orders') }}" class="btn btn-primary">
+    <i class="fa-solid fa-plus-circle"></i> Tiếp Nhận Đơn Mới
+</a>
+{% endif %}
+<a href="{{ url_for('workshop.production') }}" class="btn btn-outline">
+    <i class="fa-solid fa-gears"></i> Điều Hành Công Đoạn
+</a>
+{% endblock %}
+
+{% block content %}
+<!-- Metric Cards Grid -->
+<div class="metrics-grid">
+    <div class="metric-card">
+        <div class="metric-icon bg-blue">
+            <i class="fa-solid fa-clipboard-list"></i>
+        </div>
+        <div class="metric-data">
+            <span class="metric-label">Đơn Sản Xuất</span>
+            <h3 class="metric-value">{{ orders|length }}</h3>
+            <span class="metric-sub">Đang thực hiện & Mới tạo</span>
+        </div>
+    </div>
+
+    {% if session.get('user_role') != 'NhanVien' %}
+    <div class="metric-card">
+        <div class="metric-icon bg-purple">
+            <i class="fa-solid fa-boxes-stacked"></i>
+        </div>
+        <div class="metric-data">
+            <span class="metric-label">Sản Phẩm & Định Mức</span>
+            <h3 class="metric-value">{{ products|length }}</h3>
+            <span class="metric-sub">Định mức vật tư (BOM)</span>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if session.get('user_role') != 'NhanVien' %}
+    <div class="metric-card">
+        <div class="metric-icon bg-orange">
+            <i class="fa-solid fa-warehouse"></i>
+        </div>
+        <div class="metric-data">
+            <span class="metric-label">Nguyên Liệu Tồn</span>
+            <h3 class="metric-value">{{ materials|length }}</h3>
+            <span class="metric-sub">Danh mục vật tư trong kho</span>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if session.get('user_role') == 'QuanLyXuong' %}
+    <div class="metric-card">
+        <div class="metric-icon bg-red">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+        </div>
+        <div class="metric-data">
+            <span class="metric-label">Tỷ Lệ Lỗi (BR-06)</span>
+            <h3 class="metric-value">{{ defect_stats.defect_rate }}%</h3>
+            <span class="metric-sub">{{ defect_stats.total_defective }} hỏng / {{ defect_stats.total_output }} sản phẩm</span>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Main Section: Progress & Orders -->
+<div class="grid-2-col">
+    <!-- Progress List -->
+    <div class="card">
+        <div class="card-header">
+            <h3><i class="fa-solid fa-chart-pie text-primary"></i> Tiến Độ Các Đơn Hàng Đang Thực Hiện (FR-12)</h3>
+            <a href="{{ url_for('workshop.orders') }}" class="btn btn-sm btn-outline">
+                Xem tất cả <i class="fa-solid fa-arrow-right"></i>
+            </a>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 14%;">Mã Đơn</th>
+                            <th style="width: 26%;">Sản Phẩm</th>
+                            <th style="width: 18%;">Yêu Cầu</th>
+                            <th style="width: 22%;">Tiến Độ (%)</th>
+                            <th style="width: 10%;">Hạn Giao</th>
+                            <th style="width: 10%;">Trạng Thái</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in progress_summary %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('workshop.production', order_id=p.order_id) }}" style="text-decoration:none; font-weight:700; color: #2563eb;">
+                                    Đơn #{{ p.order_id }}
+                                </a>
+                            </td>
+                            <td><strong style="color: #0f172a;">{{ p.product_name }}</strong></td>
+                            <td>{{ p.completed_qty }} / {{ p.requested_qty }}</td>
+                            <td>
+                                <div class="progress-bar-container">
+                                    <div class="progress-bar-fill" style="width: {{ p.progress_percent }}%;"></div>
+                                </div>
+                                <span class="progress-text">{{ p.progress_percent }}%</span>
+                            </td>
+                            <td><small class="text-muted">{{ p.due_date }}</small></td>
+                            <td>
+                                <span class="badge {% if p.status == 'Hoàn thành' %}badge-success{% elif p.status == 'Đang thực hiện' %}badge-warning{% else %}badge-info{% endif %}">
+                                    {{ p.status }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% if not progress_summary %}
+                <div style="padding: 30px 20px; text-align: center; color: #64748b;">
+                    <i class="fa-solid fa-clipboard-check" style="font-size: 32px; color: #cbd5e1; margin-bottom: 8px; display: block;"></i>
+                    <p>Hiện không có đơn hàng nào đang sản xuất.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Quick Assistant Promo -->
+    {% if session.get('user_role') in ['QuanLyXuong', 'ToTruong'] %}
+    <div class="card ai-card" style="border: 1px solid rgba(139, 92, 246, 0.3); box-shadow: 0 4px 20px rgba(139, 92, 246, 0.1);">
+        <div class="card-header" style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(59, 130, 246, 0.08) 100%);">
+            <h3><i class="fa-solid fa-wand-magic-sparkles text-purple"></i> Trợ Lý AI Sản Xuất (Gemini)</h3>
+            <span class="badge badge-ai">Safe SDLC</span>
+        </div>
+        <div class="card-body">
+            <p style="font-size: 13.5px; color: #475569; margin-bottom: 16px;">
+                Hệ thống tích hợp Trợ lý AI chạy trên dữ liệu snapshot CSDL đã được kiểm chứng an toàn:
+            </p>
+            <ul class="feature-list" style="list-style: none; padding-left: 0; margin-bottom: 20px;">
+                <li style="padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; display: flex; align-items: flex-start; gap: 8px;">
+                    <i class="fa-solid fa-check-circle text-success" style="margin-top: 3px;"></i>
+                    <span><strong>Tóm tắt tiến độ đơn:</strong> Diễn giải tự động các công đoạn hoàn thành và nguy cơ trễ hẹn (FR-15).</span>
+                </li>
+                <li style="padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; display: flex; align-items: flex-start; gap: 8px;">
+                    <i class="fa-solid fa-check-circle text-success" style="margin-top: 3px;"></i>
+                    <span><strong>Phân tích mô tả lỗi:</strong> Phân nhóm nguyên nhân và đề xuất giả thuyết kỹ thuật (FR-16).</span>
+                </li>
+                <li style="padding: 8px 0; font-size: 13px; display: flex; align-items: flex-start; gap: 8px;">
+                    <i class="fa-solid fa-check-circle text-success" style="margin-top: 3px;"></i>
+                    <span><strong>Gợi ý ưu tiên đơn:</strong> Đánh giá mức độ khẩn cấp theo hạn giao và tồn kho vật tư (FR-17).</span>
+                </li>
+            </ul>
+            <div class="ai-cta">
+                <a href="{{ url_for('ai.assistant_page') }}" class="btn btn-primary btn-block" style="background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%);">
+                    <i class="fa-solid fa-comments"></i> Mở Màn Hình Trợ Lý AI
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

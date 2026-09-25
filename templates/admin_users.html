@@ -1,0 +1,486 @@
+{% extends "base.html" %}
+
+{% block page_title %}Quản Lý Tài Khoản & Phân Quyền{% endblock %}
+{% block page_subtitle %}Phân chia tài khoản hệ thống và tài khoản chờ phê duyệt riêng biệt{% endblock %}
+
+{% block header_actions %}
+<button type="button" class="btn btn-primary" onclick="toggleCreateUserDrawer()">
+    <i class="fa-solid fa-user-plus"></i> Thêm Tài Khoản Nội Bộ
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="admin-user-layout">
+    <!-- Top Stats Overview Grid -->
+    <div class="admin-stats-overview">
+        <div class="admin-stat-card" onclick="switchAdminTab('system')" title="Xem danh sách tài khoản hệ thống">
+            <div class="stat-icon-wrapper stat-system">
+                <i class="fa-solid fa-users"></i>
+            </div>
+            <div class="stat-details">
+                <div class="stat-number">{{ total_system }}</div>
+                <div class="stat-label">Tài Khoản Hệ Thống</div>
+                <div class="stat-subtext">Đã phân quyền & hoạt động</div>
+            </div>
+        </div>
+
+        <div class="admin-stat-card {% if total_pending > 0 %}stat-card-has-pending{% endif %}" onclick="switchAdminTab('pending')" title="Xem danh sách tài khoản chờ duyệt">
+            <div class="stat-icon-wrapper stat-pending">
+                <i class="fa-solid fa-user-clock"></i>
+            </div>
+            <div class="stat-details">
+                <div class="stat-number-wrapper">
+                    <span class="stat-number text-pending">{{ total_pending }}</span>
+                    {% if total_pending > 0 %}
+                    <span class="pulse-indicator">Cần duyệt</span>
+                    {% endif %}
+                </div>
+                <div class="stat-label">Chờ Phê Duyệt</div>
+                <div class="stat-subtext">
+                    {% if total_pending > 0 %}
+                    ⚠️ Có yêu cầu cần xét duyệt
+                    {% else %}
+                    Đã duyệt toàn bộ
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="admin-stat-card">
+            <div class="stat-icon-wrapper stat-active">
+                <i class="fa-solid fa-circle-check"></i>
+            </div>
+            <div class="stat-details">
+                <div class="stat-number text-success">{{ total_active }}</div>
+                <div class="stat-label">Đang Hoạt Động</div>
+                <div class="stat-subtext">Quyền truy cập bình thường</div>
+            </div>
+        </div>
+
+        <div class="admin-stat-card">
+            <div class="stat-icon-wrapper stat-locked">
+                <i class="fa-solid fa-user-lock"></i>
+            </div>
+            <div class="stat-details">
+                <div class="stat-number text-muted">{{ total_locked }}</div>
+                <div class="stat-label">Tạm Dừng / Đóng Băng</div>
+                <div class="stat-subtext">Đang bị khóa truy cập</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Alert Banner if any pending accounts exist -->
+    {% if total_pending > 0 %}
+    <div class="pending-notification-banner">
+        <div class="banner-icon">
+            <i class="fa-solid fa-bell"></i>
+        </div>
+        <div class="banner-body">
+            <h4>Có {{ total_pending }} tài khoản tự đăng ký đang chờ bạn phê duyệt!</h4>
+            <p>Người dùng tự đăng ký chưa thể truy cập vào hệ thống xưởng cho đến khi Quản trị viên duyệt và chỉ định vai trò nội bộ.</p>
+        </div>
+        <button type="button" class="btn btn-warning banner-btn" onclick="switchAdminTab('pending')">
+            <i class="fa-solid fa-arrow-right"></i> Xem danh sách chờ duyệt ({{ total_pending }})
+        </button>
+    </div>
+    {% endif %}
+
+    <!-- Collapsible Drawer: Add New Internal User -->
+    <div class="action-drawer" id="createUserDrawer" style="display: none;">
+        <div class="action-drawer-header" onclick="toggleCreateUserDrawer()">
+            <h3><i class="fa-solid fa-user-plus text-primary"></i> Thêm Tài Khoản Nội Bộ Trực Tiếp</h3>
+            <button type="button" class="btn btn-ghost btn-xs"><i class="fa-solid fa-xmark"></i> Đóng</button>
+        </div>
+        <div class="action-drawer-body">
+            <form action="{{ url_for('auth.create_user') }}" method="POST" class="admin-create-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="tab" value="system">
+                <div class="form-group">
+                    <label for="new-account-code">Mã tài khoản (tùy chọn)</label>
+                    <input id="new-account-code" name="account_code" type="text" maxlength="32" placeholder="Ví dụ: DTC12345">
+                </div>
+                <div class="form-group admin-field-wide">
+                    <label for="new-name">Họ và tên *</label>
+                    <input id="new-name" name="name" type="text" minlength="2" maxlength="100"
+                           placeholder="Nguyễn Văn A" autocomplete="name" required>
+                </div>
+                <div class="form-group admin-field-wide">
+                    <label for="new-email">Email đăng nhập *</label>
+                    <input id="new-email" name="email" type="email" maxlength="100"
+                           placeholder="name@workshop.edu.vn" autocomplete="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="new-password">Mật khẩu *</label>
+                    <input id="new-password" name="password" type="password" minlength="6"
+                           placeholder="Tối thiểu 6 ký tự" autocomplete="new-password" required>
+                </div>
+                <div class="form-group">
+                    <label for="new-role">Vai trò *</label>
+                    <select id="new-role" name="role" required>
+                        {% for role in roles %}
+                        <option value="{{ role }}" {% if role == 'NhanVien' %}selected{% endif %}>
+                            {{ {'Admin': 'Quản trị viên', 'QuanLyXuong': 'Quản lý xưởng', 'ToTruong': 'Tổ trưởng', 'NhanVien': 'Nhân viên'}[role] }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="new-leader">Tổ trưởng phụ trách (nếu là Nhân viên)</label>
+                    <select id="new-leader" name="leader_id">
+                        <option value="">-- Chưa gắn tổ --</option>
+                        {% for leader in leaders %}
+                        <option value="{{ leader.id }}">{{ leader.name }} — {{ leader.id }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary admin-create-button">
+                    <i class="fa-solid fa-plus"></i> Thêm tài khoản
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Navigation Tabs Switcher -->
+    <div class="admin-tabs-nav" role="tablist" aria-label="Phân loại danh sách tài khoản">
+        <button type="button" class="admin-tab-btn" id="tab-btn-system" onclick="switchAdminTab('system')" role="tab">
+            <i class="fa-solid fa-users"></i>
+            <span>Tài Khoản Hệ Thống</span>
+            <span class="tab-count">{{ system_users|length }}</span>
+        </button>
+        <button type="button" class="admin-tab-btn {% if total_pending > 0 %}has-pending-badge{% endif %}" id="tab-btn-pending" onclick="switchAdminTab('pending')" role="tab">
+            <i class="fa-solid fa-user-clock"></i>
+            <span>Tài Khoản Chờ Duyệt</span>
+            <span class="tab-count tab-count-pending {% if total_pending > 0 %}tab-count-highlight{% endif %}">{{ pending_users|length }}</span>
+        </button>
+        <button type="button" class="admin-tab-btn" id="tab-btn-all" onclick="switchAdminTab('all')" role="tab">
+            <i class="fa-solid fa-table-columns"></i>
+            <span>Xem Cả Hai Phân Mục</span>
+        </button>
+    </div>
+
+    <!-- Card 2: Pending Approval Accounts Section -->
+    <div class="card pending-accounts-card" id="pending-section">
+        <div class="card-header admin-card-heading pending-card-header">
+            <div>
+                <h3>
+                    <i class="fa-solid fa-user-clock text-warning"></i>
+                    Danh Sách Tài Khoản Chờ Phê Duyệt
+                    {% if pending_users|length > 0 %}
+                    <span class="badge badge-warning">{{ pending_users|length }} yêu cầu</span>
+                    {% endif %}
+                </h3>
+                <p>Tài khoản người dùng tự đăng ký. Cần được Quản trị viên xét duyệt và chỉ định vai trò để tham gia hệ thống.</p>
+            </div>
+        </div>
+        <div class="card-body">
+            {% if pending_users|length > 0 %}
+            <div class="table-responsive">
+                <table class="data-table pending-users-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 32%;">Tài khoản đăng ký</th>
+                            <th style="width: 18%;">Trạng thái</th>
+                            <th style="width: 34%;">Chỉ định vai trò & Phê duyệt</th>
+                            <th style="width: 16%; text-align: right;">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in pending_users %}
+                        <tr>
+                            <td>
+                                <div class="account-cell">
+                                    <div class="account-avatar avatar-pending">{{ u.name[:1]|upper }}</div>
+                                    <div>
+                                        <div class="account-name">{{ u.name }}</div>
+                                        <code>{{ u.email }}</code>
+                                        <small>ID #{{ u.id }}</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="account-status account-status-pending">
+                                    <i class="fa-solid fa-clock"></i> Chờ duyệt
+                                </span>
+                            </td>
+                            <td>
+                                <form action="{{ url_for('auth.approve_user', user_id=u.id) }}" method="POST" class="approve-action-form">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="tab" value="pending">
+                                    <select name="role" class="form-select-sm select-role-approve" aria-label="Cấp vai trò cho {{ u.name }}" required>
+                                        <option value="">-- Chọn vai trò cấp --</option>
+                                        <option value="QuanLyXuong">Quản lý xưởng</option>
+                                        <option value="ToTruong">Tổ trưởng</option>
+                                        <option value="NhanVien">Nhân viên</option>
+                                    </select>
+                                    <select name="leader_id" class="form-select-sm" aria-label="Tổ trưởng phụ trách cho {{ u.name }}">
+                                        <option value="">-- Chưa gắn tổ --</option>
+                                        {% for leader in leaders %}
+                                        <option value="{{ leader.id }}">Tổ {{ leader.name }} — {{ leader.id }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="submit" class="btn btn-sm btn-success btn-approve" title="Duyệt tài khoản và cấp quyền">
+                                        <i class="fa-solid fa-check"></i> Duyệt
+                                    </button>
+                                </form>
+                            </td>
+                            <td style="text-align: right;">
+                                <form action="{{ url_for('auth.delete_user', user_id=u.id) }}" method="POST"
+                                      data-confirm="Từ chối và xóa yêu cầu đăng ký của {{ u.name }}?">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="tab" value="pending">
+                                    <button type="submit" class="btn btn-sm btn-soft-danger" title="Từ chối yêu cầu đăng ký">
+                                        <i class="fa-solid fa-trash-can"></i> Từ chối
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="admin-empty-state">
+                <div class="empty-icon-wrapper text-success">
+                    <i class="fa-solid fa-circle-check"></i>
+                </div>
+                <h4>Không có tài khoản nào đang chờ duyệt</h4>
+                <p>Tất cả các tài khoản tự đăng ký đã được phê duyệt hoặc chưa có yêu cầu mới.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Card 3: System Accounts Section -->
+    <div class="card system-accounts-card" id="system-section">
+        <div class="card-header admin-card-heading">
+            <div>
+                <h3>
+                    <i class="fa-solid fa-users-gear text-primary"></i>
+                    Danh Sách Tài Khoản Hệ Thống
+                    <span class="badge badge-role">{{ system_users|length }} tài khoản</span>
+                </h3>
+                <p>{{ system_users|length }} tài khoản chính thức đã phân quyền đang được quản lý trong hệ thống</p>
+            </div>
+        </div>
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('auth.manage_users') }}" class="filter-form" aria-label="Tìm và lọc tài khoản hệ thống">
+                <input type="hidden" name="tab" id="filter-tab-input" value="{{ active_tab }}">
+                <input type="search" name="q" value="{{ q }}" placeholder="Tìm theo mã, tên hoặc email..." aria-label="Mã, tên hoặc email">
+                <select name="role" aria-label="Lọc vai trò">
+                    <option value="">Mọi vai trò</option>
+                    {% for role in filter_roles %}
+                    <option value="{{ role }}" {% if role_filter == role %}selected{% endif %}>
+                        {{ {'Admin': 'Quản trị viên', 'QuanLyXuong': 'Quản lý xưởng', 'ToTruong': 'Tổ trưởng', 'NhanVien': 'Nhân viên'}.get(role, role) }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <select name="status" aria-label="Lọc trạng thái">
+                    <option value="">Mọi trạng thái</option>
+                    {% for status in statuses %}
+                    <option value="{{ status }}" {% if status_filter == status %}selected{% endif %}>
+                        {{ {'Active': 'Hoạt động', 'Suspended': 'Tạm dừng', 'Frozen': 'Đóng băng'}.get(status, status) }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fa-solid fa-filter"></i> Tìm và lọc
+                </button>
+                <a href="{{ url_for('auth.manage_users') }}" class="btn btn-outline">
+                    <i class="fa-solid fa-rotate-left"></i> Xóa lọc
+                </a>
+            </form>
+
+            <div class="account-status-legend" aria-label="Chú thích trạng thái">
+                <span><i class="status-dot status-active"></i> Hoạt động</span>
+                <span><i class="status-dot status-suspended"></i> Tạm dừng</span>
+                <span><i class="status-dot status-frozen"></i> Đóng băng</span>
+            </div>
+
+            <div class="table-responsive">
+                <table class="data-table admin-users-table">
+                    <thead>
+                        <tr>
+                            <th>Tài khoản</th>
+                            <th>Vai trò</th>
+                            <th>Tổ phụ trách</th>
+                            <th>Trạng thái</th>
+                            <th style="text-align: right;">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in system_users %}
+                        {% set is_self = u.id|string == session.get('user_id')|string %}
+                        <tr>
+                            <td>
+                                <div class="account-cell">
+                                    <div class="account-avatar">{{ u.name[:1]|upper }}</div>
+                                    <div>
+                                        <div class="account-name">
+                                            {{ u.name }}
+                                            {% if is_self %}<span class="self-label">Bạn</span>{% endif %}
+                                        </div>
+                                        <code>{{ u.email }}</code>
+                                        <small>ID #{{ u.id }}</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                {% if u.role == 'Admin' %}
+                                <span class="badge badge-role">Quản trị viên</span>
+                                {% else %}
+                                <form action="{{ url_for('auth.update_user_role', user_id=u.id) }}" method="POST" class="compact-action-form">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="tab" value="system">
+                                    <select name="role" class="form-select-sm" aria-label="Vai trò của {{ u.name }}" {% if is_self %}disabled{% endif %}>
+                                        {% for role in roles %}
+                                        <option value="{{ role }}" {% if u.role == role %}selected{% endif %}>
+                                           {{ {'Admin': 'Quản trị viên', 'QuanLyXuong': 'Quản lý xưởng', 'ToTruong': 'Tổ trưởng', 'NhanVien': 'Nhân viên'}[role] }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="submit" class="btn btn-sm btn-outline" title="Lưu vai trò mới" {% if is_self %}disabled{% endif %}>
+                                        <i class="fa-solid fa-check"></i> Lưu
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if u.role == 'NhanVien' and u.status == 'Active' %}
+                                <form action="{{ url_for('auth.update_user_team', user_id=u.id) }}" method="POST" class="compact-action-form">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <select name="leader_id" class="form-select-sm" aria-label="Tổ trưởng phụ trách của {{ u.name }}">
+                                        <option value="">-- Chưa gắn tổ --</option>
+                                        {% for leader in leaders %}
+                                        <option value="{{ leader.id }}" {% if team_by_worker.get(u.id|string) == leader.id|string %}selected{% endif %}>{{ leader.name }} — {{ leader.id }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="submit" class="btn btn-sm btn-outline" title="Lưu tổ phụ trách"><i class="fa-solid fa-check"></i> Lưu</button>
+                                </form>
+                                {% elif u.role == 'NhanVien' %}Tạm dừng{% else %}—{% endif %}
+                            </td>
+                            <td>
+                                <span class="account-status account-status-{{ u.status|lower }}">
+                                    <i class="fa-solid {% if u.status == 'Active' %}fa-circle-check{% elif u.status == 'Suspended' %}fa-pause{% else %}fa-snowflake{% endif %}"></i>
+                                    {{ {'Active': 'Hoạt động', 'Suspended': 'Tạm dừng', 'Frozen': 'Đóng băng'}.get(u.status, u.status) }}
+                                </span>
+                            </td>
+                            <td style="text-align: right;">
+                                {% if is_self %}
+                                <span class="self-protection"><i class="fa-solid fa-shield-halved"></i> Đang đăng nhập</span>
+                                {% else %}
+                                <div class="account-actions" style="justify-content: flex-end;">
+                                    <form action="{{ url_for('auth.update_user_status', user_id=u.id) }}" method="POST" class="compact-action-form">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="tab" value="system">
+                                        <select name="status" class="form-select-sm" aria-label="Trạng thái của {{ u.name }}">
+                                            {% for status in statuses %}
+                                            <option value="{{ status }}" {% if u.status == status %}selected{% endif %}>
+                                                {{ {'Active': 'Cho hoạt động', 'Suspended': 'Tạm dừng', 'Frozen': 'Đóng băng'}[status] }}
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                        <button type="submit" class="btn btn-sm btn-warning" title="Cập nhật trạng thái khóa/mở">
+                                            <i class="fa-solid fa-lock"></i> Đổi
+                                        </button>
+                                    </form>
+                                    <form action="{{ url_for('auth.delete_user', user_id=u.id) }}" method="POST"
+                                          data-confirm="Xóa tài khoản {{ u.name }}? Hành động này không thể hoàn tác.">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="tab" value="system">
+                                        <button type="submit" class="btn btn-sm btn-soft-danger" title="Xóa tài khoản">
+                                            <i class="fa-solid fa-trash-can"></i> Xóa
+                                        </button>
+                                    </form>
+                                </div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" class="empty-state">Không có tài khoản hệ thống nào phù hợp với bộ lọc.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleCreateUserDrawer() {
+    const drawer = document.getElementById('createUserDrawer');
+    if (drawer) {
+        if (drawer.style.display === 'none' || drawer.style.display === '') {
+            drawer.style.display = 'block';
+            drawer.scrollIntoView({ behavior: 'smooth' });
+        } else {
+            drawer.style.display = 'none';
+        }
+    }
+}
+
+function switchAdminTab(tabName) {
+    const pendingSection = document.getElementById('pending-section');
+    const systemSection = document.getElementById('system-section');
+    const tabBtnPending = document.getElementById('tab-btn-pending');
+    const tabBtnSystem = document.getElementById('tab-btn-system');
+    const tabBtnAll = document.getElementById('tab-btn-all');
+    const filterTabInput = document.getElementById('filter-tab-input');
+
+    // Remove active from all tabs
+    [tabBtnPending, tabBtnSystem, tabBtnAll].forEach(btn => {
+        if (btn) btn.classList.remove('active');
+    });
+
+    if (tabName === 'pending') {
+        if (pendingSection) pendingSection.style.display = 'block';
+        if (systemSection) systemSection.style.display = 'none';
+        if (tabBtnPending) tabBtnPending.classList.add('active');
+    } else if (tabName === 'system') {
+        if (pendingSection) pendingSection.style.display = 'none';
+        if (systemSection) systemSection.style.display = 'block';
+        if (tabBtnSystem) tabBtnSystem.classList.add('active');
+    } else {
+        // 'all'
+        tabName = 'all';
+        if (pendingSection) pendingSection.style.display = 'block';
+        if (systemSection) systemSection.style.display = 'block';
+        if (tabBtnAll) tabBtnAll.classList.add('active');
+    }
+
+    if (filterTabInput) {
+        filterTabInput.value = tabName;
+    }
+
+    // Keep URL parameter synchronized
+    try {
+        const url = new URL(window.location);
+        url.searchParams.set('tab', tabName);
+        window.history.replaceState({}, '', url);
+    } catch (e) {
+        // Fallback for older browsers
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialTab = urlParams.get('tab') || {{ active_tab|tojson }};
+    switchAdminTab(initialTab);
+    document.querySelectorAll('#createUserDrawer form, .approve-action-form').forEach(form => {
+        const role = form.querySelector('select[name="role"]');
+        const leader = form.querySelector('select[name="leader_id"]');
+        if (!role || !leader) return;
+        const update = () => {
+            const isWorker = role.value === 'NhanVien';
+            leader.disabled = !isWorker;
+            if (!isWorker) leader.value = '';
+            if (form.closest('#createUserDrawer')) leader.closest('.form-group').style.display = isWorker ? '' : 'none';
+            else leader.style.display = isWorker ? '' : 'none';
+        };
+        role.addEventListener('change', update);
+        update();
+    });
+});
+</script>
+{% endblock %}
